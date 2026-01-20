@@ -11,142 +11,168 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <style>
-    :root { color-scheme: light; }
-    body { margin: 0; font-family: system-ui, Arial; background: #f6f6f6; color: #111; }
-    .wrap { max-width: 760px; margin: 0 auto; padding: 16px; }
-    h1 { font-size: 20px; margin: 8px 0 16px; }
+    :root {
+      color-scheme: light;
+      --tile: 56px;   /* גודל ריבוע */
+      --gap: 10px;    /* רווח בין ריבועים */
+      --w: calc((var(--tile) * 5) + (var(--gap) * 4)); /* רוחב אחיד לכל האלמנטים */
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, Arial;
+      background: #f6f6f6;
+      color: #111;
+    }
+
+    .wrap {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 18px 14px 28px;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 10px 0 16px;
+      text-align: center;
+      line-height: 1.15;
+    }
 
     .card {
       background: #fff;
-      border-radius: 16px;
-      padding: 14px;
-      box-shadow: 0 6px 22px rgba(0,0,0,0.07);
-      margin-bottom: 12px;
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 10px 26px rgba(0,0,0,0.08);
+      margin-bottom: 14px;
     }
 
-    .row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+    /* “רוחב אחיד” לכל המודולים החשובים */
+    .fixedWidth {
+      width: min(100%, var(--w));
+      margin: 0 auto;
+    }
 
-    .slot {
-      display: flex;
-      flex-direction: column;
+    /* 5 ריבועים תמיד בשורה אחת */
+    .row {
+      display: grid;
+      grid-template-columns: repeat(5, var(--tile));
+      gap: var(--gap);
+      justify-content: center;
       align-items: center;
-      gap: 6px;
-      width: 60px;
+      margin: 6px auto 12px;
     }
+
+    .slot { display: contents; }
 
     .slot input[type="text"]{
-      width: 56px;
-      height: 56px;
-      font-size: 28px;
+      width: var(--tile);
+      height: var(--tile);
+      font-size: 30px;
       text-align: center;
       border-radius: 14px;
-      border: 2px solid #ddd;
+      border: 2px solid #e3e3e3;
       outline: none;
       background: #fff;
-    }
-    .slot input[type="text"]:focus{ border-color: #111; }
-
-    .toggle {
-      font-size: 12px;
-      user-select: none;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
     }
 
-    label { font-size: 14px; }
-    .field {
-      display: grid;
-      gap: 6px;
-      margin-top: 12px;
+    .slot input[type="text"]:focus{
+      border-color: #111;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.10);
     }
-    .field input[type="text"]{
-      padding: 10px 12px;
-      font-size: 16px;
-      border-radius: 12px;
-      border: 2px solid #ddd;
+
+    label {
+      display: block;
+      font-size: 14px;
+      margin: 10px 0 8px;
+      text-align: right;
+    }
+
+    #pool {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 18px;
+      border-radius: 14px;
+      border: 2px solid #e3e3e3;
       outline: none;
     }
-    .field input[type="text"]:focus{ border-color: #111; }
 
-    .meta {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      font-size: 13px;
-      color: #444;
-      margin-top: 10px;
+    #pool:focus { border-color: #111; }
+
+    /* תוצאות: כל שורה היא גם “גריד של 5” באותו גודל */
+    .results {
+      max-height: 56vh;
+      overflow: auto;
+      padding: 6px 0 0;
     }
 
+    .pattern-line {
+      display: grid;
+      grid-template-columns: repeat(5, var(--tile));
+      gap: var(--gap);
+      justify-content: center;
+      align-items: center;
+      padding: 10px 0;
+    }
+
+    .cell {
+      width: var(--tile);
+      height: var(--tile);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 30px;
+      border-bottom: 3px solid #111; /* קו דק, לא בולד */
+      padding-bottom: 6px;
+      border-radius: 10px;
+    }
+
+    .cell.blank { color: transparent; }
+
+    /* הודעת שגיאה קצרה, אם צריך */
     .warn {
+      display: none;
+      width: min(100%, var(--w));
+      margin: 12px auto 0;
       color: #7a1a1a;
       background: #fff2f2;
       border: 1px solid #ffd0d0;
       padding: 10px 12px;
       border-radius: 12px;
-      margin-top: 10px;
       font-size: 14px;
+      text-align: right;
     }
 
-    /* תצוגת תבנית גדולה עם קו תחתון עבה */
-    .pattern-line {
-      font-size: 34px;
-      line-height: 1.25;
-      letter-spacing: 0.12em;
-      padding: 6px 0;
-      white-space: pre;
-    }
-    .cell {
-      display: inline-block;
-      width: 1.1em;
-      text-align: center;
-      border-bottom: 6px solid #111;
-      padding-bottom: 4px;
-      margin-left: 0.25em;
-    }
-    .cell.blank { color: transparent; } /* underscore "נראה" רק ע"י הקו */
-    .results {
-      max-height: 52vh;
-      overflow: auto;
-      padding-left: 2px;
-    }
-    .results small { color: #666; }
-
-    .footer {
-      font-size: 12px;
-      color: #666;
-      margin-top: 8px;
+    @media (max-width: 360px){
+      :root { --tile: 50px; --gap: 8px; }
+      h1 { font-size: 20px; }
+      .slot input[type="text"], .cell { font-size: 28px; }
     }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <h1>מחולל אפשרויות לתבנית 5 אותיות</h1>
 
     <div class="card">
-      <div class="row" id="slots"></div>
+      <div class="fixedWidth">
+        <div class="row" id="slots"></div>
 
-      <div class="field">
-        <label for="pool">אותיות משתנות (לפי ספירה, בלי רווחים)</label>
-        <input id="pool" type="text" inputmode="text" autocomplete="off" placeholder="לדוגמה: חנ  או  אאב" />
+        <label for="pool">אותיות ידועות</label>
+        <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="4"
+               placeholder="לדוגמה: חנ או אאב" />
       </div>
 
-      <div class="meta">
-        <div>מקומות פנויים: <strong id="freeCount">0</strong></div>
-        <div>תוצאות: <strong id="resultCount">0</strong></div>
-      </div>
-
-      <div class="warn" id="warning" style="display:none;"></div>
-      <div class="footer">כל שינוי מתעדכן מיד. תאים ריקים מוצגים כקו תחתון עבה.</div>
+      <div class="warn" id="warning"></div>
     </div>
 
     <div class="card">
-      <div class="meta" style="margin-top:0;">
-        <div><strong>תוצאות</strong></div>
-        <div><small id="perf"></small></div>
+      <div class="fixedWidth">
+        <div class="results" id="results"></div>
       </div>
-      <div class="results" id="results"></div>
     </div>
   </div>
 
