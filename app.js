@@ -32,6 +32,8 @@ function buildSlotsUI() {
       const v = (input.value || "").trim();
       slots[i].fixedChar = v ? v.slice(-1) : "";
       input.value = slots[i].fixedChar;
+      input.classList.toggle("filled", !!slots[i].fixedChar);
+      input.classList.toggle("filled", !!slots[i].fixedChar);
       recompute();
     });
 
