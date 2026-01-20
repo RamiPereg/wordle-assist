@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
- // <title>לא בושה לבקש עזרה</title>
+  <title>מחולל תבניות 5 אותיות</title>
 
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#111111" />
@@ -150,14 +150,20 @@
       h1 { font-size: 20px; }
       .slot input[type="text"], .cell { font-size: 28px; }
     }
+
+/* תא שיש בו אות -> ירוק */
+.slot input.filled {
+  background: #2ecc71;
+  border-color: #2ecc71;
+  color: #111;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+}
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <h1>לא בושה לבקש עזרה</h1>
-
-    <div class="card">
+        <div class="card">
       <div class="fixedWidth">
         <div class="row" id="slots"></div>
 
@@ -179,6 +185,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
-
-
