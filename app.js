@@ -26,17 +26,24 @@ function buildSlotsUI() {
     input.type = "text";
     input.maxLength = 1;
     input.setAttribute("aria-label", `אות קבועה בתא ${i + 1}`);
-    input.value = slots[i].fixedChar;
+
+    // תצוגה ראשונית (כולל אות סופית אם זה התא השמאלי)
+    const initialDisplayChar =
+      (i === 0 && slots[i].fixedChar) ? toFinalHebrewLetter(slots[i].fixedChar) : slots[i].fixedChar;
+
+    input.value = initialDisplayChar;
+    input.classList.toggle("filled", !!slots[i].fixedChar);
 
     input.addEventListener("input", () => {
       const v = (input.value || "").trim();
       slots[i].fixedChar = v ? v.slice(-1) : "";
+
+      // תצוגה בזמן הקלדה (כולל אות סופית אם זה התא השמאלי)
       const displayChar =
-  (i === 0 && slots[i].fixedChar) ? toFinalHebrewLetter(slots[i].fixedChar) : slots[i].fixedChar;
+        (i === 0 && slots[i].fixedChar) ? toFinalHebrewLetter(slots[i].fixedChar) : slots[i].fixedChar;
 
-input.value = displayChar;
+      input.value = displayChar;
 
-      input.classList.toggle("filled", !!slots[i].fixedChar);
       input.classList.toggle("filled", !!slots[i].fixedChar);
       recompute();
     });
@@ -222,4 +229,5 @@ function recompute() {
 buildSlotsUI();
 poolEl.addEventListener("input", recompute);
 recompute();
+
 
