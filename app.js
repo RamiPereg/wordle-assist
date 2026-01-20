@@ -16,8 +16,12 @@ const warningEl = document.getElementById("warning");
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
 
 /** Build UI for slots */
+/** Build UI for slots */
 function buildSlotsUI() {
   slotsEl.innerHTML = "";
+
+  const inputs = [];
+
   for (let i = 0; i < SLOT_COUNT; i++) {
     const wrap = document.createElement("div");
     wrap.className = "slot";
@@ -27,11 +31,13 @@ function buildSlotsUI() {
     input.maxLength = 1;
     input.setAttribute("aria-label", `אות קבועה בתא ${i + 1}`);
 
+    inputs[i] = input;
+
     // תצוגה ראשונית (כולל אות סופית אם זה התא השמאלי)
     const initialDisplayChar =
-  (i === SLOT_COUNT - 1 && slots[i].fixedChar)
-    ? toFinalHebrewLetter(toRegularHebrewLetter(slots[i].fixedChar))
-    : toRegularHebrewLetter(slots[i].fixedChar);
+      (i === SLOT_COUNT - 1 && slots[i].fixedChar)
+        ? toFinalHebrewLetter(toRegularHebrewLetter(slots[i].fixedChar))
+        : toRegularHebrewLetter(slots[i].fixedChar);
 
     input.value = initialDisplayChar;
     input.classList.toggle("filled", !!slots[i].fixedChar);
@@ -40,15 +46,53 @@ function buildSlotsUI() {
       const v = (input.value || "").trim();
       slots[i].fixedChar = v ? toRegularHebrewLetter(v.slice(-1)) : "";
 
-
       // תצוגה בזמן הקלדה (כולל אות סופית אם זה התא השמאלי)
       const displayChar =
-        (i === SLOT_COUNT - 1 && slots[i].fixedChar) ? toFinalHebrewLetter(slots[i].fixedChar) : slots[i].fixedChar;
+        (i === SLOT_COUNT - 1 && slots[i].fixedChar)
+          ? toFinalHebrewLetter(slots[i].fixedChar)
+          : slots[i].fixedChar;
 
       input.value = displayChar;
 
       input.classList.toggle("filled", !!slots[i].fixedChar);
       recompute();
+    });
+
+    input.addEventListener("keydown", (e) => {
+      // ניווט בלבד עם חיצים (ויזואלי)
+      if (e.key === "ArrowRight") {
+        // ימינה על המסך => אינדקס קטן יותר
+        e.preventDefault();
+        const next = i - 1;
+        if (next >= 0) inputs[next].focus();
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        // שמאלה על המסך => אינדקס גדול יותר
+        e.preventDefault();
+        const next = i + 1;
+        if (next < SLOT_COUNT) inputs[next].focus();
+        return;
+      }
+
+      // Backspace חורנית: אם התא ריק – עוברים תא אחד אחורה (לכיוון תחילת המילה, אינדקס קטן יותר) ומוחקים שם
+      if (e.key === "Backspace") {
+        // אם יש תוכן בתא הנוכחי – נותנים ל-Backspace הרגיל למחוק (ה-event של input יעדכן state)
+        if (input.value && input.value.trim() !== "") return;
+
+        const prev = i - 1;
+        if (prev < 0) return;
+
+        e.preventDefault();
+
+        slots[prev].fixedChar = "";
+        inputs[prev].value = "";
+        inputs[prev].classList.remove("filled");
+        inputs[prev].focus();
+
+        recompute();
+      }
     });
 
     wrap.appendChild(input);
