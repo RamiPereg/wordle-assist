@@ -10,22 +10,17 @@ const SLOT_COUNT = 5;
 const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
 const resultsEl = document.getElementById("results");
-const freeCountEl = document.getElementById("freeCount");
-const resultCountEl = document.getElementById("resultCount");
 const warningEl = document.getElementById("warning");
-const perfEl = document.getElementById("perf");
 
 /** State */
-const slots = Array.from({ length: SLOT_COUNT }, () => ({
-  fixedChar: ""
-}));
+const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
 
-/** Build UI for slots (בלי צ'קבוקסים) */
+/** Build UI for slots */
 function buildSlotsUI() {
   slotsEl.innerHTML = "";
   for (let i = 0; i < SLOT_COUNT; i++) {
-    const slotWrap = document.createElement("div");
-    slotWrap.className = "slot";
+    const wrap = document.createElement("div");
+    wrap.className = "slot";
 
     const input = document.createElement("input");
     input.type = "text";
@@ -40,8 +35,8 @@ function buildSlotsUI() {
       recompute();
     });
 
-    slotWrap.appendChild(input);
-    slotsEl.appendChild(slotWrap);
+    wrap.appendChild(input);
+    slotsEl.appendChild(wrap);
   }
 }
 
@@ -53,23 +48,19 @@ function sanitizePool(s) {
 
 function countChars(str) {
   const m = new Map();
-  for (const ch of str) {
-    m.set(ch, (m.get(ch) || 0) + 1);
-  }
+  for (const ch of str) m.set(ch, (m.get(ch) || 0) + 1);
   return m;
 }
 
-function renderPattern(arr5) {
-  const line = document.createElement("div");
-  line.className = "pattern-line";
-
-  for (let i = 0; i < SLOT_COUNT; i++) {
-    const span = document.createElement("span");
-    span.className = "cell" + (arr5[i] ? "" : " blank");
-    span.textContent = arr5[i] ? arr5[i] : "_";
-    line.appendChild(span);
+function setWarning(msg) {
+  if (!warningEl) return;
+  if (!msg) {
+    warningEl.style.display = "none";
+    warningEl.textContent = "";
+    return;
   }
-  return line;
+  warningEl.style.display = "block";
+  warningEl.textContent = msg;
 }
 
 /** קומבינציות: לבחור k מקומות מתוך positions */
@@ -94,13 +85,11 @@ function combinations(positions, k) {
 }
 
 /**
- * Generate all unique permutations of a multiset (Map<char,count>)
- * placed into 'chosenPositions' (array of indices within 0..4).
- * Mutates baseArr5 during recursion, returns array of arrays length 5.
+ * Generate all unique permutations of a multiset placed into chosenPositions
  */
 function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   const results = [];
-  const chars = [...multisetCounts.keys()].sort((a,b) => a.localeCompare(b));
+  const chars = [...multisetCounts.keys()].sort((a, b) => a.localeCompare(b));
 
   function backtrack(posIdx) {
     if (posIdx === chosenPositions.length) {
@@ -127,10 +116,21 @@ function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   return results;
 }
 
-function recompute() {
-  const t0 = performance.now();
+function renderPattern(arr5) {
+  const line = document.createElement("div");
+  line.className = "pattern-line";
 
-  // ננרמל את השדה וגם נעדכן אותו בפועל (כדי שאם הדביקו 10 אותיות, זה ייחתך ל-4)
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const span = document.createElement("span");
+    span.className = "cell" + (arr5[i] ? "" : " blank");
+    span.textContent = arr5[i] ? arr5[i] : "_";
+    line.appendChild(span);
+  }
+  return line;
+}
+
+function recompute() {
+  // Normalize pool input and hard-limit to 4 chars
   const normalized = sanitizePool(poolEl.value);
   if (poolEl.value !== normalized) poolEl.value = normalized;
 
@@ -148,44 +148,36 @@ function recompute() {
     }
   }
 
-  // positions to fill with known letters
+  // Free positions
   const freePositions = [];
   for (let i = 0; i < SLOT_COUNT; i++) {
     if (!fixedPositions.has(i)) freePositions.push(i);
   }
-  freeCountEl.textContent = String(freePositions.length);
 
-  warningEl.style.display = "none";
-  warningEl.textContent = "";
-
+  setWarning("");
   resultsEl.innerHTML = "";
-  resultCountEl.textContent = "0";
-  perfEl.textContent = "";
 
   const k = pool.length;
 
-  // אם אין אותיות ידועות — מציגים תוצאה אחת: רק הקבועות, והשאר _
+  // אם אין אותיות ידועות — מציגים תבנית אחת: קבועות, והשאר ריק
   if (k === 0) {
-    const only = base.slice();
-    resultsEl.appendChild(renderPattern(only));
-    resultCountEl.textContent = "1";
+    resultsEl.appendChild(renderPattern(base.slice()));
     return;
   }
 
   // אם הזנת יותר אותיות ממספר החורים — שגיאה (A)
   if (k > freePositions.length) {
-    warningEl.textContent = `הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`;
-    warningEl.style.display = "block";
+    setWarning(`הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`);
     return;
   }
 
-  // מייצרים:
-  // 1) בוחרים באילו חורים לשבץ את האותיות (קומבינציות)
-  // 2) בכל בחירה, מייצרים את כל הפרמוטציות הייחודיות (לפי ספירה, כולל כפילויות)
+  // Generate:
+  // 1) choose which holes to fill
+  // 2) generate all unique permutations for the multiset
   const chosenSets = combinations(freePositions, k);
 
   const uniq = new Set();
-  const final = [];
+  const frag = document.createDocumentFragment();
 
   for (const chosen of chosenSets) {
     const baseCopy = base.slice();
@@ -196,19 +188,11 @@ function recompute() {
       const key = arr.join("\u0001");
       if (uniq.has(key)) continue;
       uniq.add(key);
-      final.push(arr);
+      frag.appendChild(renderPattern(arr));
     }
   }
 
-  // רינדור
-  const frag = document.createDocumentFragment();
-  for (const arr of final) frag.appendChild(renderPattern(arr));
   resultsEl.appendChild(frag);
-
-  resultCountEl.textContent = String(final.length);
-
-  const t1 = performance.now();
-  perfEl.textContent = `${final.length} תוצאות • ${Math.round(t1 - t0)}ms`;
 }
 
 buildSlotsUI();
