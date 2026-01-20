@@ -1,4 +1,4 @@
-const CACHE_NAME = "pwa-templates-v1";
+const CACHE_NAME = "wordle-cache-v2";
 const ASSETS = ["./", "./index.html", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -22,3 +22,4 @@ self.addEventListener("fetch", (event) => {
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
 });
+
