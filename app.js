@@ -116,6 +116,17 @@ function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   return results;
 }
 
+function toFinalHebrewLetter(ch) {
+  const map = {
+    "כ": "ך",
+    "מ": "ם",
+    "נ": "ן",
+    "פ": "ף",
+    "צ": "ץ",
+  };
+  return map[ch] || ch;
+}
+
 function renderPattern(arr5) {
   const line = document.createElement("div");
   line.className = "pattern-line";
@@ -123,7 +134,14 @@ function renderPattern(arr5) {
   for (let i = 0; i < SLOT_COUNT; i++) {
     const span = document.createElement("span");
     span.className = "cell" + (arr5[i] ? "" : " blank");
-    span.textContent = arr5[i] ? arr5[i] : "_";
+    let ch = arr5[i] ? arr5[i] : "_";
+
+// רק התא שמייצג את האות האחרונה במילה (אינדקס אחרון במחרוזת)
+if (i === SLOT_COUNT - 1 && ch !== "_") {
+  ch = toFinalHebrewLetter(ch);
+}
+
+span.textContent = ch;
     line.appendChild(span);
   }
   return line;
