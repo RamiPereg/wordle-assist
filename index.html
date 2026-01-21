@@ -10,10 +10,35 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
+
+
+
   <style>
-    #pool::placeholder {
-    font-style: italic;
-    }
+
+#known-note {
+  font-size: 12px;
+  text-align: center;
+  margin-top: -4px;
+  margin-bottom: 10px;
+  color: #444;
+  opacity: 1;
+  transition: opacity 0.8s ease;
+}
+
+#known-note.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#known-note .green {
+  color: #2ecc71; /* אותו ירוק של התאים */
+  font-weight: 600;
+}
+
+
+	#pool::placeholder {
+	font-style: italic;
+	}
 
     :root {
       color-scheme: light;
@@ -163,6 +188,44 @@
   color: #111;
   box-shadow: 0 6px 18px rgba(0,0,0,0.10);
 }
+
+#pool-note {
+  font-size: 12px;
+  text-align: center;
+  margin-bottom: 6px;
+  color: #444;
+}
+
+#pool-note .yellow {
+  color: #f1c40f;
+  font-weight: 600;
+}
+
+.pool-wrap {
+  position: relative;
+}
+
+#pool-fake-placeholder {
+  position: absolute;
+  inset-inline-start: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  font-style: italic;
+  color: #888;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+#pool-fake-placeholder.hidden {
+  opacity: 0;
+}
+
+#pool-fake-placeholder .yellow {
+  color: #f1c40f;
+  font-weight: 600;
+}
+
   </style>
 </head>
 
@@ -170,11 +233,24 @@
   <div class="wrap">
         <div class="card">
       <div class="fixedWidth">
-        <div class="row" id="slots"></div>
+  <div class="row" id="slots"></div>
 
-       <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="4"
-               placeholder="אותיות ידועות (מיקום לא ידוע)" />
-      </div>
+  <div id="known-note">
+    אותיות שמיקומן ידוע (<span class="green">ירוקות</span>)
+  </div>
+
+ 
+<div class="pool-wrap">
+  <div id="pool-fake-placeholder">
+    אותיות עם מיקום לא ידוע (<span class="yellow">צהובות</span>)
+  </div>
+
+  <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="4"
+         autocomplete="off" />
+</div>
+
+
+</div>
 
       <div class="warn" id="warning"></div>
     </div>
