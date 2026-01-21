@@ -9,8 +9,20 @@ const SLOT_COUNT = 5;
 
 const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
+const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
+const knownNoteEl = document.getElementById("known-note");
+let knownNoteTimerStarted = false;
+
+function startKnownNoteFade() {
+  if (!knownNoteEl || knownNoteTimerStarted) return;
+  knownNoteTimerStarted = true;
+  setTimeout(() => {
+    knownNoteEl.classList.add("hidden");
+  }, 10000);
+}
+
 
 /** State */
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
@@ -55,6 +67,9 @@ function buildSlotsUI() {
       input.value = displayChar;
 
       input.classList.toggle("filled", !!slots[i].fixedChar);
+
+startKnownNoteFade();
+
       recompute();
     });
 
@@ -286,6 +301,15 @@ function recompute() {
 }
 
 buildSlotsUI();
-poolEl.addEventListener("input", recompute);
+poolEl.addEventListener("input", () => {
+  if (poolFakePlaceholder) {
+    poolFakePlaceholder.classList.toggle(
+      "hidden",
+      poolEl.value.length > 0
+    );
+  }
+  recompute();
+});
+
 recompute();
 
