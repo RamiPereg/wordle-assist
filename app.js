@@ -13,31 +13,60 @@ const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
+
 let knownNoteTimerStarted = false;
 
-/* ====== STATE ====== */
+/** ===== State ===== */
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
-const hiddenWords = new Set();               // מילים שהועפו בסווייפ
-const bannedPositions = new Set();           // `${letter}|${visualIndex}`
 
-/* ====== UI HELPERS ====== */
+// Session-only (מתאפס בריפרש)
+const hiddenPatterns = new Set(); // key של שורה שהועפה בסווייפ
+const bannedPositions = new Set(); // `${letter}|${visualIndex}`  (ויזואלי: 0=ימני ביותר)
+
+/** ===== Minimal injected styles (for menu + swipe feel) ===== */
+(function injectStyles() {
+  const css = `
+  .pattern-line { position: relative; user-select: none; -webkit-user-select: none; }
+  .pattern-line.swipe-anim { transition: transform 0.18s ease; }
+  .wa-menu {
+    position: fixed;
+    z-index: 9999;
+    background: #111;
+    color: #fff;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+    font-size: 13px;
+    min-width: 190px;
+  }
+  .wa-menu button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 10px 10px;
+    text-align: right;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .wa-menu button:active { background: rgba(255,255,255,0.12); }
+  `;
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
+/** ===== Helpers ===== */
 function startKnownNoteFade() {
   if (!knownNoteEl || knownNoteTimerStarted) return;
   knownNoteTimerStarted = true;
-  setTimeout(() => knownNoteEl.classList.add("hidden"), 3000);
-}
-
-function toFinalHebrewLetter(ch) {
-  const map = { כ:"ך", מ:"ם", נ:"ן", פ:"ף", צ:"ץ" };
-  return map[ch] || ch;
-}
-
-function toRegularHebrewLetter(ch) {
-  const map = { ך:"כ", ם:"מ", ן:"נ", ף:"פ", ץ:"צ" };
-  return map[ch] || ch;
+  setTimeout(() => {
+    knownNoteEl.classList.add("hidden");
+  }, 3000);
 }
 
 function sanitizePool(s) {
+  // מסירים רווחים ומגבילים ל-4 תווים (גם אם מדביקים יותר)
   return (s || "").replace(/\s+/g, "").slice(0, 4);
 }
 
@@ -49,13 +78,90 @@ function countChars(str) {
 
 function setWarning(msg) {
   if (!warningEl) return;
-  warningEl.style.display = msg ? "block" : "none";
-  warningEl.textContent = msg || "";
+  if (!msg) {
+    warningEl.style.display = "none";
+    warningEl.textContent = "";
+    return;
+  }
+  warningEl.style.display = "block";
+  warningEl.textContent = msg;
 }
 
-/* ====== BUILD SLOTS ====== */
+function combinations(positions, k) {
+  const out = [];
+  const n = positions.length;
+
+  function rec(start, pick, acc) {
+    if (pick === 0) {
+      out.push(acc.slice());
+      return;
+    }
+    for (let i = start; i <= n - pick; i++) {
+      acc.push(positions[i]);
+      rec(i + 1, pick - 1, acc);
+      acc.pop();
+    }
+  }
+
+  rec(0, k, []);
+  return out;
+}
+
+function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
+  const results = [];
+  const chars = [...multisetCounts.keys()].sort((a, b) => a.localeCompare(b));
+
+  function backtrack(posIdx) {
+    if (posIdx === chosenPositions.length) {
+      results.push(baseArr5.slice());
+      return;
+    }
+    const slotIndex = chosenPositions[posIdx];
+
+    for (const ch of chars) {
+      const remaining = multisetCounts.get(ch) || 0;
+      if (remaining <= 0) continue;
+
+      multisetCounts.set(ch, remaining - 1);
+      baseArr5[slotIndex] = ch;
+
+      backtrack(posIdx + 1);
+
+      baseArr5[slotIndex] = "";
+      multisetCounts.set(ch, remaining);
+    }
+  }
+
+  backtrack(0);
+  return results;
+}
+
+function toFinalHebrewLetter(ch) {
+  const map = { כ: "ך", מ: "ם", נ: "ן", פ: "ף", צ: "ץ" };
+  return map[ch] || ch;
+}
+
+function toRegularHebrewLetter(ch) {
+  const map = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
+  return map[ch] || ch;
+}
+
+// מפתח יציב (לא עושה התנגשויות כשהמערך כולל "")
+function makeKey(arr5) {
+  return arr5.join("\u0001");
+}
+
+// מיקום "ויזואלי" לפי התאים כפי שהם מופיעים על המסך.
+// במבנה הנוכחי (dir=rtl + grid), התא הראשון שנוצר (i=0) הוא הימני ביותר.
+// לכן visualIndex = logicalIndex.
+function visualIndexFromLogical(logicalIndex) {
+  return logicalIndex;
+}
+
+/** ===== Build UI for slots ===== */
 function buildSlotsUI() {
   slotsEl.innerHTML = "";
+
   const inputs = [];
 
   for (let i = 0; i < SLOT_COUNT; i++) {
@@ -65,45 +171,64 @@ function buildSlotsUI() {
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = 1;
+    input.setAttribute("aria-label", `אות קבועה בתא ${i + 1}`);
+
     inputs[i] = input;
 
-    input.value =
+    const initialDisplayChar =
       (i === SLOT_COUNT - 1 && slots[i].fixedChar)
-        ? toFinalHebrewLetter(slots[i].fixedChar)
-        : slots[i].fixedChar;
+        ? toFinalHebrewLetter(toRegularHebrewLetter(slots[i].fixedChar))
+        : toRegularHebrewLetter(slots[i].fixedChar);
 
+    input.value = initialDisplayChar;
     input.classList.toggle("filled", !!slots[i].fixedChar);
 
     input.addEventListener("input", () => {
       const v = (input.value || "").trim();
       slots[i].fixedChar = v ? toRegularHebrewLetter(v.slice(-1)) : "";
-      input.value =
+
+      const displayChar =
         (i === SLOT_COUNT - 1 && slots[i].fixedChar)
           ? toFinalHebrewLetter(slots[i].fixedChar)
           : slots[i].fixedChar;
+
+      input.value = displayChar;
       input.classList.toggle("filled", !!slots[i].fixedChar);
+
       startKnownNoteFade();
       recompute();
     });
 
     input.addEventListener("keydown", (e) => {
+      // ניווט ויזואלי
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        if (i > 0) inputs[i - 1].focus();
+        const next = i - 1;
+        if (next >= 0) inputs[next].focus();
+        return;
       }
+
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        if (i < SLOT_COUNT - 1) inputs[i + 1].focus();
+        const next = i + 1;
+        if (next < SLOT_COUNT) inputs[next].focus();
+        return;
       }
-      if (e.key === "Backspace" && !input.value) {
+
+      if (e.key === "Backspace") {
+        if (input.value && input.value.trim() !== "") return;
+
+        const prev = i - 1;
+        if (prev < 0) return;
+
         e.preventDefault();
-        if (i > 0) {
-          slots[i - 1].fixedChar = "";
-          inputs[i - 1].value = "";
-          inputs[i - 1].classList.remove("filled");
-          inputs[i - 1].focus();
-          recompute();
-        }
+
+        slots[prev].fixedChar = "";
+        inputs[prev].value = "";
+        inputs[prev].classList.remove("filled");
+        inputs[prev].focus();
+
+        recompute();
       }
     });
 
@@ -112,178 +237,293 @@ function buildSlotsUI() {
   }
 }
 
-/* ====== COMBINATORICS ====== */
-function combinations(arr, k) {
-  const out = [];
-  function rec(start, acc) {
-    if (acc.length === k) return out.push(acc.slice());
-    for (let i = start; i < arr.length; i++) {
-      acc.push(arr[i]);
-      rec(i + 1, acc);
-      acc.pop();
-    }
+/** ===== Long-press menu ===== */
+let activeMenuEl = null;
+
+function closeMenu() {
+  if (activeMenuEl) {
+    activeMenuEl.remove();
+    activeMenuEl = null;
   }
-  rec(0, []);
-  return out;
 }
 
-function generatePlacements(base, chosen, counts) {
-  const results = [];
-  const chars = [...counts.keys()];
+function openMenuAt(x, y, onBan) {
+  closeMenu();
 
-  function backtrack(idx) {
-    if (idx === chosen.length) {
-      results.push(base.slice());
+  const menu = document.createElement("div");
+  menu.className = "wa-menu";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "האות לא יכולה להיות במיקום הזה";
+  btn.addEventListener("click", () => {
+    closeMenu();
+    onBan();
+  });
+
+  menu.appendChild(btn);
+  document.body.appendChild(menu);
+
+  // מיקום: קצת מעל/מתחת לפי מקום במסך
+  const pad = 10;
+  const rect = menu.getBoundingClientRect();
+  let left = x - rect.width / 2;
+  let top = y + 12;
+
+  left = Math.max(pad, Math.min(left, window.innerWidth - rect.width - pad));
+  top = Math.max(pad, Math.min(top, window.innerHeight - rect.height - pad));
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  activeMenuEl = menu;
+}
+
+document.addEventListener("pointerdown", (e) => {
+  // סגירה בלחיצה מחוץ לתפריט
+  if (activeMenuEl && !activeMenuEl.contains(e.target)) closeMenu();
+});
+window.addEventListener("scroll", closeMenu, { passive: true });
+window.addEventListener("resize", closeMenu);
+
+/** ===== Swipe to delete ===== */
+function attachSwipeToLine(lineEl, patternKey) {
+  let startX = 0;
+  let startY = 0;
+  let dx = 0;
+  let dy = 0;
+  let startTime = 0;
+  let tracking = false;
+
+  // לא לפגוע בגלילה אנכית רגילה
+  lineEl.style.touchAction = "pan-y";
+
+  function resetPosition(animated) {
+    if (animated) lineEl.classList.add("swipe-anim");
+    lineEl.style.transform = "";
+    lineEl.style.background = "";
+    if (animated) {
+      setTimeout(() => lineEl.classList.remove("swipe-anim"), 220);
+    } else {
+      lineEl.classList.remove("swipe-anim");
+    }
+  }
+
+  lineEl.addEventListener("pointerdown", (e) => {
+    // אם יש תפריט פתוח, סגור
+    closeMenu();
+
+    tracking = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    dx = 0;
+    dy = 0;
+    startTime = Date.now();
+    lineEl.setPointerCapture(e.pointerId);
+    lineEl.classList.remove("swipe-anim");
+  });
+
+  lineEl.addEventListener("pointermove", (e) => {
+    if (!tracking) return;
+    dx = e.clientX - startX;
+    dy = e.clientY - startY;
+
+    // אם זו תנועה אנכית מובהקת — לא מתערבים
+    if (Math.abs(dy) > Math.abs(dx) * 1.2) {
+      resetPosition(false);
       return;
     }
-    const pos = chosen[idx];
-    for (const ch of chars) {
-      if (!counts.get(ch)) continue;
-      counts.set(ch, counts.get(ch) - 1);
-      base[pos] = ch;
-      backtrack(idx + 1);
-      base[pos] = "";
-      counts.set(ch, counts.get(ch) + 1);
-    }
-  }
 
-  backtrack(0);
-  return results;
+    // רק שמאלה
+    if (dx < 0) {
+      lineEl.style.transform = `translateX(${dx}px)`;
+      lineEl.style.background = "#ffe3e3";
+    } else {
+      resetPosition(false);
+    }
+  });
+
+  lineEl.addEventListener("pointerup", () => {
+    if (!tracking) return;
+    tracking = false;
+
+    const dt = Date.now() - startTime;
+
+    // סטנדרט: מרחק סף או flick מהיר
+    const farEnough = dx < -lineEl.offsetWidth * 0.35;
+    const fastFlick = dt < 220 && dx < -45;
+
+    if (farEnough || fastFlick) {
+      hiddenPatterns.add(patternKey);
+      recompute();
+      return;
+    }
+
+    resetPosition(true);
+  });
+
+  lineEl.addEventListener("pointercancel", () => {
+    tracking = false;
+    resetPosition(true);
+  });
 }
 
-/* ====== RENDER LINE ====== */
+/** ===== Render result line ===== */
 function renderPattern(arr5) {
+  const patternKey = makeKey(arr5);
+  if (hiddenPatterns.has(patternKey)) return null;
+
+  // סינון לפי bannedPositions
+  for (let logicalIndex = 0; logicalIndex < SLOT_COUNT; logicalIndex++) {
+    const ch = arr5[logicalIndex];
+    if (!ch) continue;
+    const vIdx = visualIndexFromLogical(logicalIndex);
+    if (bannedPositions.has(`${ch}|${vIdx}`)) return null;
+  }
+
   const line = document.createElement("div");
   line.className = "pattern-line";
 
-  const wordKey = arr5.join("");
-  if (hiddenWords.has(wordKey)) return null;
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const span = document.createElement("span");
+    span.className = "cell" + (arr5[i] ? "" : " blank");
 
-  arr5.forEach((rawCh, logicalIndex) => {
-    const cell = document.createElement("span");
-    cell.className = "cell" + (rawCh ? "" : " blank");
+    let raw = arr5[i] ? arr5[i] : "_";
+    // רק התא שמייצג את האות האחרונה במילה (אינדקס אחרון במערך)
+    if (i === SLOT_COUNT - 1 && raw !== "_") {
+      raw = toFinalHebrewLetter(raw);
+    }
+    span.textContent = raw;
 
-    let ch = rawCh || "_";
-    if (logicalIndex === SLOT_COUNT - 1 && ch !== "_") {
-      ch = toFinalHebrewLetter(ch);
+    // long press רק אם יש אות אמיתית
+    if (arr5[i]) {
+      let timer = null;
+      let downX = 0;
+      let downY = 0;
+      let canceled = false;
+
+      span.addEventListener("pointerdown", (e) => {
+        canceled = false;
+        downX = e.clientX;
+        downY = e.clientY;
+
+        timer = setTimeout(() => {
+          if (canceled) return;
+
+          const letter = arr5[i]; // אות רגילה ב-state
+          const visualIndex = visualIndexFromLogical(i);
+
+          openMenuAt(e.clientX, e.clientY, () => {
+            bannedPositions.add(`${letter}|${visualIndex}`);
+            recompute();
+          });
+        }, 450);
+      });
+
+      span.addEventListener("pointermove", (e) => {
+        // אם המשתמש מתחיל לגרור (סווייפ) — מבטלים long press
+        const mx = Math.abs(e.clientX - downX);
+        const my = Math.abs(e.clientY - downY);
+        if (mx > 10 || my > 10) {
+          canceled = true;
+          if (timer) clearTimeout(timer);
+          timer = null;
+        }
+      });
+
+      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => {
+        span.addEventListener(ev, () => {
+          if (timer) clearTimeout(timer);
+          timer = null;
+        });
+      });
     }
 
-    cell.textContent = ch;
+    line.appendChild(span);
+  }
 
-    // long press
-    let pressTimer = null;
-    cell.addEventListener("pointerdown", () => {
-      if (!rawCh) return;
-      pressTimer = setTimeout(() => {
-        const visualIndex = SLOT_COUNT - 1 - logicalIndex;
-        bannedPositions.add(`${rawCh}|${visualIndex}`);
-        recompute();
-      }, 450);
-    });
-    ["pointerup", "pointerleave", "pointercancel"]
-      .forEach(ev => cell.addEventListener(ev, () => clearTimeout(pressTimer)));
-
-    line.appendChild(cell);
-  });
-
-  enableSwipeToDelete(line, wordKey);
+  attachSwipeToLine(line, patternKey);
   return line;
 }
 
-/* ====== SWIPE DELETE ====== */
-function enableSwipeToDelete(el, wordKey) {
-  let startX = 0, currentX = 0, startTime = 0;
-  el.style.touchAction = "pan-y";
-
-  el.addEventListener("pointerdown", e => {
-    startX = e.clientX;
-    startTime = Date.now();
-    el.setPointerCapture(e.pointerId);
-  });
-
-  el.addEventListener("pointermove", e => {
-    currentX = e.clientX - startX;
-    if (currentX < 0) {
-      el.style.transform = `translateX(${currentX}px)`;
-      el.style.background = "#ffdddd";
-    }
-  });
-
-  el.addEventListener("pointerup", () => {
-    const dt = Date.now() - startTime;
-    const fast = dt < 200 && currentX < -40;
-    const far = currentX < -el.offsetWidth * 0.35;
-
-    if (fast || far) {
-      hiddenWords.add(wordKey);
-      recompute();
-    } else {
-      el.style.transform = "";
-      el.style.background = "";
-    }
-  });
-}
-
-/* ====== RECOMPUTE ====== */
+/** ===== Main compute ===== */
 function recompute() {
+  // Normalize pool input and hard-limit to 4 chars
   const normalized = sanitizePool(poolEl.value);
-  poolEl.value = normalized;
+  if (poolEl.value !== normalized) poolEl.value = normalized;
 
-  const poolCounts = countChars(normalized);
-  const base = Array(SLOT_COUNT).fill("");
-  const fixed = new Set();
+  const pool = normalized;
+  const poolCounts = countChars(pool);
 
-  slots.forEach((s, i) => {
-    if (s.fixedChar) {
-      base[i] = s.fixedChar;
-      fixed.add(i);
+  // Base array with fixed chars
+  const base = Array.from({ length: SLOT_COUNT }, () => "");
+  const fixedPositions = new Set();
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const ch = slots[i].fixedChar;
+    if (ch) {
+      base[i] = ch;
+      fixedPositions.add(i);
     }
-  });
-
-  const free = [...Array(SLOT_COUNT).keys()].filter(i => !fixed.has(i));
-  resultsEl.innerHTML = "";
-  setWarning("");
-
-  if (normalized.length > free.length) {
-    setWarning("יותר אותיות ידועות ממקומות פנויים");
-    return;
   }
 
-  if (!normalized.length) {
+  // Free positions
+  const freePositions = [];
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    if (!fixedPositions.has(i)) freePositions.push(i);
+  }
+
+  setWarning("");
+  resultsEl.innerHTML = "";
+  closeMenu();
+
+  const k = pool.length;
+
+  // אם אין אותיות ידועות — מציגים תבנית אחת: קבועות, והשאר ריק
+  if (k === 0) {
     const line = renderPattern(base.slice());
     if (line) resultsEl.appendChild(line);
     return;
   }
 
-  const chosenSets = combinations(free, normalized.length);
+  // אם הזנת יותר אותיות ממספר החורים — שגיאה
+  if (k > freePositions.length) {
+    setWarning(
+      `הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`
+    );
+    return;
+  }
+
+  const chosenSets = combinations(freePositions, k);
+
   const uniq = new Set();
+  const frag = document.createDocumentFragment();
 
   for (const chosen of chosenSets) {
-    const placements = generatePlacements(base.slice(), chosen, new Map(poolCounts));
+    const baseCopy = base.slice();
+    const ms = new Map(poolCounts);
+
+    const placements = generatePlacements(baseCopy, chosen, ms);
     for (const arr of placements) {
-      const key = arr.join("");
+      const key = makeKey(arr);
       if (uniq.has(key)) continue;
       uniq.add(key);
 
-      // בדיקת bannedPositions
-      let blocked = false;
-      arr.forEach((ch, logicalIndex) => {
-        if (!ch) return;
-        const visualIndex = SLOT_COUNT - 1 - logicalIndex;
-        if (bannedPositions.has(`${ch}|${visualIndex}`)) blocked = true;
-      });
-      if (blocked) continue;
-
       const line = renderPattern(arr);
-      if (line) resultsEl.appendChild(line);
+      if (line) frag.appendChild(line);
     }
   }
+
+  resultsEl.appendChild(frag);
 }
 
-/* ====== INIT ====== */
+/** ===== Init ===== */
 buildSlotsUI();
+
 poolEl.addEventListener("input", () => {
-  poolFakePlaceholder?.classList.toggle("hidden", poolEl.value.length > 0);
+  if (poolFakePlaceholder) {
+    poolFakePlaceholder.classList.toggle("hidden", poolEl.value.length > 0);
+  }
   recompute();
 });
+
 recompute();
