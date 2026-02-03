@@ -65,9 +65,10 @@ function startKnownNoteFade() {
   }, 3000);
 }
 
-function sanitizePool(s) {
-  // מסירים רווחים ומגבילים ל-4 תווים (גם אם מדביקים יותר)
-  return (s || "").replace(/\s+/g, "").slice(0, 4);
+function sanitizePool(s, maxLen) {
+  // מסירים רווחים ומגבילים לאורך מקסימלי (גם אם מדביקים יותר)
+  const lim = typeof maxLen === "number" ? Math.max(0, maxLen) : 5;
+  return (s || "").replace(/\s+/g, "").slice(0, lim);
 }
 
 function countChars(str) {
@@ -182,6 +183,20 @@ function buildSlotsUI() {
 
     input.value = initialDisplayChar;
     input.classList.toggle("filled", !!slots[i].fixedChar);
+
+    // נגיעה על תא ירוק: מוחקת מיד את האות ומאפשרת הקלדה חדשה
+    input.addEventListener("pointerdown", (e) => {
+      if (!slots[i].fixedChar) return;
+      // מנקים לפני שהמקלדת נפתחת
+      e.preventDefault();
+      slots[i].fixedChar = "";
+      input.value = "";
+      input.classList.remove("filled");
+      startKnownNoteFade();
+      recompute();
+      // מחזירים פוקוס כדי לאפשר הקלדה מיידית
+      setTimeout(() => input.focus(), 0);
+    });
 
     input.addEventListener("input", () => {
       const v = (input.value || "").trim();
@@ -448,13 +463,6 @@ function renderPattern(arr5) {
 
 /** ===== Main compute ===== */
 function recompute() {
-  // Normalize pool input and hard-limit to 4 chars
-  const normalized = sanitizePool(poolEl.value);
-  if (poolEl.value !== normalized) poolEl.value = normalized;
-
-  const pool = normalized;
-  const poolCounts = countChars(pool);
-
   // Base array with fixed chars
   const base = Array.from({ length: SLOT_COUNT }, () => "");
   const fixedPositions = new Set();
@@ -465,6 +473,15 @@ function recompute() {
       fixedPositions.add(i);
     }
   }
+
+  // Normalize pool input (אחרי שיודעים כמה ירוקות יש): סה"כ 5 אותיות בין ירוקות+צהובות
+  const fixedCount = fixedPositions.size;
+  const maxPoolLen = SLOT_COUNT - fixedCount; // כמה "צהובות" מותר לכל היותר
+  const normalized = sanitizePool(poolEl.value, maxPoolLen);
+  if (poolEl.value !== normalized) poolEl.value = normalized;
+
+  const pool = normalized;
+  const poolCounts = countChars(pool);
 
   // Free positions
   const freePositions = [];
