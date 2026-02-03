@@ -135,6 +135,8 @@
       max-height: 56vh;
       overflow: auto;
       padding: 6px 0 0;
+      /* מונע גלילת-X/חיתוכים במובייל (בעיקר iOS) */
+      overflow-x: hidden;
     }
 
     .pattern-line {
@@ -144,6 +146,9 @@
       justify-content: center;
       align-items: center;
       padding: 10px 0;
+      /* מבטיח שכל שורת תוצאה יושבת בדיוק באותו רוחב/יישור כמו שורת הירוקות */
+      width: var(--w);
+      margin: 0 auto;
     }
 
     .cell {
@@ -245,7 +250,7 @@
     אותיות שמיקומן לא ידוע (<span class="yellow">צהובות</span>)
   </div>
 
-  <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="5"
+  <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="4"
          autocomplete="off" />
 </div>
 
