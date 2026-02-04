@@ -232,6 +232,155 @@
   font-weight: 600;
 }
 
+.image-input {
+  margin-top: 14px;
+}
+
+.image-drop {
+  display: block;
+  border: 2px dashed #d6d6d6;
+  border-radius: 16px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  background: #fafafa;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.image-drop:focus-visible,
+.image-drop:hover {
+  border-color: #111;
+  background: #f2f2f2;
+}
+
+.image-title {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+
+.image-help {
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.image-preview {
+  margin-top: 10px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+}
+
+.image-preview img {
+  max-width: 100%;
+  border-radius: 12px;
+  display: block;
+  margin: 0 auto;
+}
+
+.image-preview.empty img {
+  display: none;
+}
+
+.image-preview canvas {
+  width: 100%;
+  border-radius: 12px;
+  display: block;
+  margin: 0 auto;
+  cursor: crosshair;
+}
+
+.image-preview.empty canvas {
+  display: none;
+}
+
+.image-preview-placeholder {
+  font-size: 12px;
+  color: #777;
+  text-align: center;
+}
+
+.image-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.image-done {
+  border: 1.5px solid #111;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #111;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.image-clear {
+  border: 1.5px solid #d0d0d0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.keyboard-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+}
+
+.available-letters {
+  margin-top: 14px;
+}
+
+.available-title {
+  font-size: 14px;
+  margin-bottom: 8px;
+  text-align: right;
+}
+
+.available-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.letter-chip {
+  border: 1.5px solid #dcdcdc;
+  border-radius: 12px;
+  padding: 10px 0;
+  font-size: 18px;
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.letter-chip:active {
+  transform: scale(0.97);
+}
+
+.letter-chip.selected {
+  background: #f39c12;
+  border-color: #f39c12;
+  color: #111;
+}
+
+.letter-chip.available {
+  background: #f1c40f;
+  border-color: #f1c40f;
+  color: #111;
+}
+
   </style>
 </head>
 
@@ -255,6 +404,31 @@
          autocomplete="off" />
 </div>
 
+<div class="image-input">
+  <label class="image-drop" id="image-drop" for="image-upload" tabindex="0">
+    <div class="image-title">הדבק או העלה את מסך המשחק שלך</div>
+    <div>לחצי/הדביקי כאן תמונה או בחרי קובץ</div>
+    <div class="image-help">תומך בהדבקה (Ctrl+V) או העלאה מהגלריה</div>
+  </label>
+  <input id="image-upload" type="file" accept="image/*" class="hidden" />
+  <div class="image-preview empty" id="image-preview">
+    <div class="image-preview-placeholder" id="image-preview-placeholder">
+      עדיין לא הועלתה תמונה.
+    </div>
+    <img id="image-preview-img" alt="תצוגה מקדימה של המסך שהועלה" />
+    <canvas id="image-preview-canvas"></canvas>
+    <div class="image-actions hidden" id="image-actions">
+      <button type="button" class="image-done" id="image-done">סיימתי לבחור</button>
+      <button type="button" class="image-clear" id="image-clear">הסירי תמונה</button>
+    </div>
+    <div class="keyboard-status hidden" id="keyboard-status"></div>
+  </div>
+</div>
+
+<div class="available-letters" id="available-letters">
+  <div class="available-title">אותיות זמינות מהמסך:</div>
+  <div class="available-grid" id="available-grid"></div>
+</div>
 
 </div>
 
@@ -268,6 +442,7 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -13,11 +13,53 @@ const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
+const imageUploadEl = document.getElementById("image-upload");
+const imageDropEl = document.getElementById("image-drop");
+const imagePreviewEl = document.getElementById("image-preview");
+const imagePreviewImg = document.getElementById("image-preview-img");
+const imagePreviewCanvas = document.getElementById("image-preview-canvas");
+const imagePreviewPlaceholder = document.getElementById("image-preview-placeholder");
+const imageActionsEl = document.getElementById("image-actions");
+const imageDoneBtn = document.getElementById("image-done");
+const imageClearBtn = document.getElementById("image-clear");
+const keyboardStatusEl = document.getElementById("keyboard-status");
+const availableGridEl = document.getElementById("available-grid");
+const imageInputEl = document.querySelector(".image-input");
 
 let knownNoteTimerStarted = false;
 
 /** ===== State ===== */
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
+const availableLetters = [
+  "א",
+  "ב",
+  "ג",
+  "ד",
+  "ה",
+  "ו",
+  "ז",
+  "ח",
+  "ט",
+  "י",
+  "כ",
+  "ל",
+  "מ",
+  "נ",
+  "ס",
+  "ע",
+  "פ",
+  "צ",
+  "ק",
+  "ר",
+  "ש",
+  "ת",
+];
+
+let detectedAvailableLetters = null;
+let lastImageDataUrl = null;
+let previewImage = null;
+let previewMarkers = [];
+let imagePickerDisabled = false;
 
 // Session-only (מתאפס בריפרש)
 const hiddenPatterns = new Set(); // key של שורה שהועפה בסווייפ
@@ -69,6 +111,22 @@ function sanitizePool(s, maxLen) {
   // מסירים רווחים ומגבילים לאורך מקסימלי (גם אם מדביקים יותר)
   const lim = typeof maxLen === "number" ? Math.max(0, maxLen) : 5;
   return (s || "").replace(/\s+/g, "").slice(0, lim);
+}
+
+function getMaxPoolLen() {
+  return SLOT_COUNT - slots.filter((slot) => slot.fixedChar).length;
+}
+
+function syncAvailableSelection() {
+  if (!availableGridEl) return;
+  const maxLen = getMaxPoolLen();
+  const normalized = sanitizePool(poolEl.value, maxLen);
+  const selected = new Set(normalized.split(""));
+
+  availableGridEl.querySelectorAll(".letter-chip").forEach((chip) => {
+    const letter = chip.dataset.letter;
+    chip.classList.toggle("selected", selected.has(letter));
+  });
 }
 
 function countChars(str) {
@@ -461,6 +519,305 @@ function renderPattern(arr5) {
   return line;
 }
 
+/** ===== Image input + available letters UI ===== */
+function renderAvailableLetters() {
+  if (!availableGridEl) return;
+  availableGridEl.innerHTML = "";
+
+  if (!detectedAvailableLetters || detectedAvailableLetters.length === 0) {
+    const empty = document.createElement("div");
+    empty.textContent = "עדיין לא זוהו אותיות זמינות.";
+    empty.style.fontSize = "12px";
+    empty.style.color = "#666";
+    availableGridEl.appendChild(empty);
+    return;
+  }
+
+  setWarning("");
+
+  for (const letter of detectedAvailableLetters) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "letter-chip";
+    btn.textContent = letter;
+    btn.dataset.letter = letter;
+    btn.classList.add("available");
+
+    btn.addEventListener("click", () => {
+      const maxLen = getMaxPoolLen();
+      const normalized = sanitizePool(poolEl.value, maxLen);
+      const isSelected = normalized.includes(letter);
+
+      if (!isSelected && normalized.length >= maxLen) {
+        setWarning("אין עוד מקום לאותיות צהובות. מחקי אות קיימת או הוסיפי ירוקות.");
+        return;
+      }
+
+      if (isSelected) {
+        poolEl.value = normalized.replace(letter, "");
+      } else {
+        poolEl.value = normalized + letter;
+      }
+
+      if (poolFakePlaceholder) {
+        poolFakePlaceholder.classList.toggle("hidden", poolEl.value.length > 0);
+      }
+
+      setWarning("");
+      recompute();
+      syncAvailableSelection();
+    });
+
+    availableGridEl.appendChild(btn);
+  }
+
+  syncAvailableSelection();
+}
+
+function redrawPreviewCanvas() {
+  if (!imagePreviewCanvas || !previewImage) return;
+  const ctx = imagePreviewCanvas.getContext("2d");
+  imagePreviewCanvas.width = previewImage.width;
+  imagePreviewCanvas.height = previewImage.height;
+  ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
+  ctx.drawImage(previewImage, 0, 0);
+
+  previewMarkers.forEach((marker) => {
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, 16, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(241, 196, 15, 0.45)";
+    ctx.strokeStyle = "#f1c40f";
+    ctx.lineWidth = 3;
+    ctx.fill();
+    ctx.stroke();
+  });
+}
+
+function addDetectedLetter(letter) {
+  if (!letter) return;
+  if (!detectedAvailableLetters) detectedAvailableLetters = [];
+  if (!detectedAvailableLetters.includes(letter)) {
+    detectedAvailableLetters.push(letter);
+    detectedAvailableLetters.sort((a, b) => a.localeCompare(b));
+  }
+  setWarning("");
+  renderAvailableLetters();
+}
+
+function showPreview(dataUrl) {
+  if (!imagePreviewEl || !imagePreviewImg) return;
+  imagePreviewImg.onload = null;
+  imagePreviewImg.onerror = null;
+  imagePreviewImg.onload = () => {
+    imagePreviewEl.classList.remove("empty");
+    imageActionsEl?.classList.remove("hidden");
+    imagePreviewPlaceholder?.classList.add("hidden");
+    imagePreviewImg.classList.add("hidden");
+    if (keyboardStatusEl) {
+      keyboardStatusEl.textContent = "לחצי על האותיות במקלדת שבתמונה כדי לסמן אותיות זמינות.";
+      keyboardStatusEl.classList.remove("hidden");
+    }
+  };
+  imagePreviewImg.onerror = () => {
+    setWarning("לא הצלחתי להציג את התמונה. נסי שוב עם קובץ אחר.");
+    clearPreview();
+  };
+  imagePreviewImg.src = dataUrl;
+  lastImageDataUrl = dataUrl;
+  detectedAvailableLetters = null;
+  previewMarkers = [];
+  imagePickerDisabled = false;
+  previewImage = new Image();
+  previewImage.onload = () => {
+    redrawPreviewCanvas();
+  };
+  previewImage.src = dataUrl;
+  renderAvailableLetters();
+  setWarning("");
+}
+
+function clearPreview() {
+  if (!imagePreviewEl || !imagePreviewImg) return;
+  imagePreviewImg.src = "";
+  imagePreviewEl.classList.add("empty");
+  imageActionsEl?.classList.add("hidden");
+  imagePreviewPlaceholder?.classList.remove("hidden");
+  imagePreviewImg.classList.remove("hidden");
+  if (keyboardStatusEl) {
+    keyboardStatusEl.classList.add("hidden");
+    keyboardStatusEl.textContent = "";
+  }
+  if (!imagePickerDisabled) {
+    detectedAvailableLetters = null;
+  }
+  lastImageDataUrl = null;
+  previewMarkers = [];
+  if (imagePickerDisabled) {
+    if (imageInputEl) imageInputEl.classList.add("hidden");
+  } else if (imageInputEl) {
+    imageInputEl.classList.remove("hidden");
+  }
+  previewImage = null;
+  if (imagePreviewCanvas) {
+    const ctx = imagePreviewCanvas.getContext("2d");
+    ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
+  }
+  renderAvailableLetters();
+  if (imageUploadEl) imageUploadEl.value = "";
+}
+
+function handleImageFile(file) {
+  if (!file) return;
+  if (imagePickerDisabled) return;
+  if (!file.type.startsWith("image/")) {
+    setWarning("זה לא קובץ תמונה. נסי לבחור או להדביק תמונה בלבד.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result === "string") {
+      showPreview(reader.result);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function setKeyboardStatus(message, isError = false) {
+  if (!keyboardStatusEl) return;
+  keyboardStatusEl.textContent = message;
+  keyboardStatusEl.style.color = isError ? "#7a1a1a" : "#555";
+  keyboardStatusEl.classList.remove("hidden");
+}
+
+function normalizeHebrewLetter(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "";
+  const candidate = toRegularHebrewLetter(trimmed[0]);
+  return /^[א-ת]$/.test(candidate) ? candidate : "";
+}
+
+async function recognizeLetterAtPoint(x, y) {
+  if (!previewImage) return "";
+  if (!window.Tesseract) return "";
+
+  const cropRadius = 40;
+  const sx = Math.max(0, Math.round(x - cropRadius));
+  const sy = Math.max(0, Math.round(y - cropRadius));
+  const sw = Math.min(previewImage.width - sx, cropRadius * 2);
+  const sh = Math.min(previewImage.height - sy, cropRadius * 2);
+
+  const cropCanvas = document.createElement("canvas");
+  cropCanvas.width = sw;
+  cropCanvas.height = sh;
+  const ctx = cropCanvas.getContext("2d");
+  ctx.drawImage(previewImage, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  try {
+    const result = await window.Tesseract.recognize(cropCanvas, "heb");
+    const symbols = result.data?.symbols || [];
+    let best = null;
+    symbols.forEach((symbol) => {
+      const candidate = normalizeHebrewLetter(symbol.text);
+      if (!candidate) return;
+      if (!best || symbol.confidence > best.confidence) {
+        best = { text: candidate, confidence: symbol.confidence };
+      }
+    });
+    if (best && best.confidence >= 60) {
+      return best.text;
+    }
+  } catch (err) {
+    return "";
+  }
+  return "";
+}
+
+async function handlePreviewClick(event) {
+  if (!imagePreviewCanvas || !previewImage) return;
+  if (imagePickerDisabled) return;
+  const rect = imagePreviewCanvas.getBoundingClientRect();
+  const scaleX = imagePreviewCanvas.width / rect.width;
+  const scaleY = imagePreviewCanvas.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
+
+  setKeyboardStatus("מזהה את האות שנבחרה…");
+  let letter = await recognizeLetterAtPoint(x, y);
+  if (!letter) {
+    const manual = prompt("לא הצלחתי לזהות את האות. כתבי אותה כאן:");
+    letter = normalizeHebrewLetter(manual);
+  }
+
+  if (!letter) {
+    setKeyboardStatus("לא נבחרה אות תקינה. נסי שוב.", true);
+    return;
+  }
+
+  previewMarkers.push({ x, y });
+  redrawPreviewCanvas();
+  addDetectedLetter(letter);
+  setKeyboardStatus(`נבחרה האות: ${letter}`);
+}
+
+
+if (imageUploadEl) {
+  imageUploadEl.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    handleImageFile(file);
+  });
+}
+
+if (imageDropEl) {
+  imageDropEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      imageUploadEl?.click();
+    }
+  });
+
+  imageDropEl.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+
+  imageDropEl.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files && e.dataTransfer.files[0];
+    handleImageFile(file);
+  });
+}
+
+if (imageClearBtn) {
+  imageClearBtn.addEventListener("click", () => {
+    clearPreview();
+  });
+}
+
+if (imageDoneBtn) {
+  imageDoneBtn.addEventListener("click", () => {
+    imagePickerDisabled = true;
+    clearPreview();
+  });
+}
+
+if (imagePreviewCanvas) {
+  imagePreviewCanvas.addEventListener("click", (event) => {
+    handlePreviewClick(event);
+  });
+}
+
+document.addEventListener("paste", (e) => {
+  const items = e.clipboardData?.items || [];
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) {
+        handleImageFile(file);
+        break;
+      }
+    }
+  }
+});
+
 /** ===== Main compute ===== */
 function recompute() {
   // Base array with fixed chars
@@ -535,12 +892,14 @@ function recompute() {
 
 /** ===== Init ===== */
 buildSlotsUI();
+renderAvailableLetters();
 
 poolEl.addEventListener("input", () => {
   if (poolFakePlaceholder) {
     poolFakePlaceholder.classList.toggle("hidden", poolEl.value.length > 0);
   }
   recompute();
+  syncAvailableSelection();
 });
 
 recompute();
