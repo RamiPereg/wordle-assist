@@ -18,6 +18,8 @@ const selectedGridEl = document.getElementById("selected-grid");
 const imageUploadEl = document.getElementById("image-upload");
 const imageNoteWrapEl = document.getElementById("image-note-wrap");
 const imageNoteEmptyEl = document.getElementById("image-note-empty");
+const imageNoteHintEl = document.getElementById("image-note-hint");
+const imagePasteTargetEl = document.getElementById("image-paste-target");
 const imageNoteImgEl = document.getElementById("image-note-img");
 const imageNoteCloseEl = document.getElementById("image-note-close");
 const imageNoteShowEl = document.getElementById("image-note-show");
@@ -462,10 +464,12 @@ function renderPassiveImage() {
     imageNoteImgEl.src = passiveImageDataUrl;
     imageNoteImgEl.classList.remove("hidden");
     imageNoteEmptyEl.classList.add("hidden");
+    imageNoteHintEl?.classList.add("hidden");
   } else {
     imageNoteImgEl.src = "";
     imageNoteImgEl.classList.add("hidden");
     imageNoteEmptyEl.classList.remove("hidden");
+    imageNoteHintEl?.classList.remove("hidden");
   }
 }
 
@@ -496,6 +500,13 @@ if (imageUploadEl) {
 }
 
 if (imageNoteWrapEl) {
+  imageNoteWrapEl.addEventListener("pointerdown", (e) => {
+    if (e.target === imageNoteCloseEl || e.target === imageNoteShowEl) return;
+    if (!passiveImageDataUrl) {
+      imagePasteTargetEl?.focus();
+    }
+  });
+
   imageNoteWrapEl.addEventListener("click", () => {
     imageUploadEl?.click();
   });
@@ -517,12 +528,22 @@ if (imageNoteShowEl) {
 }
 
 document.addEventListener("paste", (e) => {
+  const target = e.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    if (target !== imagePasteTargetEl) return;
+  }
+
+  const inImageArea = imageNoteWrapEl?.contains(target) || target === imagePasteTargetEl;
+  if (!inImageArea) return;
+
   const items = e.clipboardData?.items || [];
   for (const item of items) {
     if (item.type.startsWith("image/")) {
       const file = item.getAsFile();
       if (file) {
+        e.preventDefault();
         handleImageFile(file);
+        if (imagePasteTargetEl) imagePasteTargetEl.value = "";
         break;
       }
     }
