@@ -215,152 +215,66 @@
       font-weight: 700;
     }
 
-    .image-input {
+    .image-note {
       margin-top: 14px;
     }
 
-    .image-drop {
-      display: block;
-      border: 2px dashed #d6d6d6;
-      border-radius: 16px;
-      padding: 16px;
-      text-align: center;
-      cursor: pointer;
+    .image-note-wrap {
+      position: relative;
+      border: 1.5px solid #e6e6e6;
+      border-radius: 12px;
       background: #fafafa;
-      transition: border-color 0.2s ease, background 0.2s ease;
+      min-height: 74px;
+      overflow: hidden;
     }
 
-    .image-drop:focus-visible,
-    .image-drop:hover {
-      border-color: #111;
-      background: #f2f2f2;
-    }
-
-    .image-title {
-      font-size: 15px;
-      margin: 0 0 6px;
-    }
-
-    .image-help {
-      font-size: 12px;
-      color: #666;
-      margin-top: 8px;
-      text-align: center;
-    }
-
-    .image-preview {
-      margin-top: 10px;
-      border: 1.5px solid #e0e0e0;
-      border-radius: 12px;
-      padding: 10px;
-      background: #fff;
-    }
-
-    .image-preview.hidden {
-      display: none;
-    }
-
-    .image-preview img {
-      max-width: 100%;
-      border-radius: 12px;
-      display: none;
-      margin: 0 auto;
-    }
-
-    .image-preview canvas {
-      width: 100%;
-      border-radius: 12px;
-      display: block;
-      margin: 0 auto;
-      touch-action: manipulation;
-      cursor: crosshair;
-    }
-
-    .image-actions {
-      display: flex;
-      justify-content: flex-start;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .image-done {
-      border: 1.5px solid #111;
+    .image-note-close {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      border: 1px solid #d4d4d4;
       border-radius: 999px;
-      padding: 6px 14px;
-      background: #111;
-      color: #fff;
-      font-size: 12px;
+      width: 24px;
+      height: 24px;
+      background: #fff;
+      color: #555;
+      font-size: 14px;
+      line-height: 1;
       cursor: pointer;
+      z-index: 2;
     }
 
-    .keyboard-status {
-      margin-top: 8px;
-      font-size: 12px;
-      color: #555;
+    .image-note-empty {
+      padding: 24px 12px;
       text-align: center;
-      min-height: 16px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .image-note-img {
+      width: 100%;
+      display: block;
+      height: auto;
+    }
+
+    .image-note-uploader {
+      display: none;
+    }
+
+    .image-note-show {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #444;
+      text-decoration: underline;
+      cursor: pointer;
+      background: none;
+      border: 0;
+      padding: 0;
     }
 
     .hidden {
       display: none !important;
-    }
-
-    .letter-modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.45);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      padding: 16px;
-    }
-
-    .letter-modal {
-      background: #fff;
-      border-radius: 14px;
-      width: min(100%, 320px);
-      padding: 14px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-
-    .letter-modal p {
-      margin: 0 0 10px;
-      font-size: 14px;
-      text-align: right;
-    }
-
-    .letter-modal input {
-      width: 100%;
-      text-align: center;
-      font-size: 30px;
-      border: 2px solid #ddd;
-      border-radius: 12px;
-      padding: 8px;
-      outline: none;
-    }
-
-    .letter-modal input:focus { border-color: #111; }
-
-    .letter-modal-actions {
-      margin-top: 10px;
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .letter-modal-actions button {
-      border: 1.5px solid #111;
-      border-radius: 999px;
-      padding: 6px 14px;
-      background: #fff;
-      font-size: 13px;
-      cursor: pointer;
-    }
-
-    .letter-modal-actions .primary {
-      background: #111;
-      color: #fff;
     }
 
     @media (max-width: 360px) {
@@ -381,31 +295,13 @@
 
         <div class="pool-wrap">
           <div id="pool-fake-placeholder">
-            אותיות שמיקומן לא ידוע (<span class="yellow">צהובות</span>)
+            אותיות שמיקומן לא ידוע (<span class="yellow">הובותצ</span>)
           </div>
           <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="5" />
         </div>
 
         <div class="selected-letters" id="selected-letters">
           <div class="selected-grid" id="selected-grid"></div>
-        </div>
-
-        <div class="image-input" id="image-input">
-          <label class="image-drop" id="image-drop" for="image-upload" tabindex="0">
-            <div class="image-title">הדבק או העלה את מסך המשחק שלך</div>
-            <div>לחצי/הדביקי כאן תמונה או בחרי קובץ</div>
-            <div class="image-help">תומך בהדבקה (Ctrl+V) או העלאה מהגלריה</div>
-          </label>
-          <input id="image-upload" type="file" accept="image/*" class="hidden" />
-
-          <div class="image-preview hidden" id="image-preview">
-            <img id="image-preview-img" alt="תצוגה מקדימה של המסך שהועלה" />
-            <canvas id="image-preview-canvas"></canvas>
-            <div class="image-actions" id="image-actions">
-              <button type="button" class="image-done" id="image-done">סיימתי לבחור</button>
-            </div>
-            <div class="keyboard-status" id="keyboard-status"></div>
-          </div>
         </div>
       </div>
 
@@ -414,23 +310,21 @@
 
     <div class="card">
       <div class="fixedWidth">
+        <div class="image-note" id="image-note">
+          <div class="image-note-wrap" id="image-note-wrap">
+            <button type="button" class="image-note-close" id="image-note-close" aria-label="סגירת תמונה">×</button>
+            <div class="image-note-empty" id="image-note-empty">Paste or upload an image</div>
+            <img class="image-note-img hidden" id="image-note-img" alt="תמונת עזר" />
+          </div>
+          <button type="button" class="image-note-show hidden" id="image-note-show">Show image</button>
+          <input id="image-upload" type="file" accept="image/*" class="image-note-uploader" />
+        </div>
+
         <div class="results" id="results"></div>
       </div>
     </div>
   </div>
 
-  <div class="letter-modal-backdrop hidden" id="letter-modal-backdrop">
-    <div class="letter-modal" role="dialog" aria-modal="true" aria-labelledby="letter-modal-title">
-      <p id="letter-modal-title">לא הצלחתי לזהות את האות. הקלידי אות אחת:</p>
-      <input id="letter-modal-input" type="text" inputmode="text" maxlength="1" autocomplete="off" />
-      <div class="letter-modal-actions">
-        <button type="button" id="letter-modal-cancel">ביטול</button>
-        <button type="button" class="primary" id="letter-modal-confirm">אישור</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
