@@ -10,41 +10,36 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-
-
-
   <style>
+    #known-note {
+      font-size: 12px;
+      text-align: center;
+      margin-top: -4px;
+      margin-bottom: 10px;
+      color: #444;
+      opacity: 1;
+      transition: opacity 0.8s ease;
+    }
 
-#known-note {
-  font-size: 12px;
-  text-align: center;
-  margin-top: -4px;
-  margin-bottom: 10px;
-  color: #444;
-  opacity: 1;
-  transition: opacity 0.8s ease;
-}
+    #known-note.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
 
-#known-note.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
+    #known-note .green {
+      color: #2ecc71;
+      font-weight: 600;
+    }
 
-#known-note .green {
-  color: #2ecc71; /* אותו ירוק של התאים */
-  font-weight: 600;
-}
-
-
-	#pool::placeholder {
-	font-style: italic;
-	}
+    #pool::placeholder {
+      font-style: italic;
+    }
 
     :root {
       color-scheme: light;
-      --tile: 56px;   /* גודל ריבוע */
-      --gap: 10px;    /* רווח בין ריבועים */
-      --w: calc((var(--tile) * 5) + (var(--gap) * 4)); /* רוחב אחיד לכל האלמנטים */
+      --tile: 56px;
+      --gap: 10px;
+      --w: calc((var(--tile) * 5) + (var(--gap) * 4));
     }
 
     * { box-sizing: border-box; }
@@ -54,21 +49,13 @@
       font-family: system-ui, Arial;
       background: #f6f6f6;
       color: #111;
-    
       overflow-x: hidden;
-}
+    }
 
     .wrap {
       max-width: 820px;
       margin: 0 auto;
       padding: 18px 14px 28px;
-    }
-
-    h1 {
-      font-size: 22px;
-      margin: 10px 0 16px;
-      text-align: center;
-      line-height: 1.15;
     }
 
     .card {
@@ -79,13 +66,11 @@
       margin-bottom: 14px;
     }
 
-    /* “רוחב אחיד” לכל המודולים החשובים */
     .fixedWidth {
       width: min(100%, var(--w));
       margin: 0 auto;
     }
 
-    /* 5 ריבועים תמיד בשורה אחת */
     .row {
       display: grid;
       grid-template-columns: repeat(5, var(--tile));
@@ -97,7 +82,7 @@
 
     .slot { display: contents; }
 
-    .slot input[type="text"]{
+    .slot input[type="text"] {
       width: var(--tile);
       height: var(--tile);
       font-size: 30px;
@@ -109,16 +94,16 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.04);
     }
 
-    .slot input[type="text"]:focus{
+    .slot input[type="text"]:focus {
       border-color: #111;
       box-shadow: 0 6px 18px rgba(0,0,0,0.10);
     }
 
-    label {
-      display: block;
-      font-size: 14px;
-      margin: 10px 0 8px;
-      text-align: right;
+    .slot input.filled {
+      background: #2ecc71;
+      border-color: #2ecc71;
+      color: #111;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.10);
     }
 
     #pool {
@@ -132,7 +117,37 @@
 
     #pool:focus { border-color: #111; }
 
-    /* תוצאות: כל שורה היא גם “גריד של 5” באותו גודל */
+    #pool:disabled {
+      background: #f3f3f3;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    .pool-wrap {
+      position: relative;
+    }
+
+    #pool-fake-placeholder {
+      position: absolute;
+      inset-inline-start: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      font-style: italic;
+      color: #888;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    #pool-fake-placeholder.hidden {
+      opacity: 0;
+    }
+
+    #pool-fake-placeholder .yellow {
+      color: #f1c40f;
+      font-weight: 600;
+    }
+
     .results {
       max-height: 56vh;
       overflow-y: auto;
@@ -147,27 +162,24 @@
       justify-content: center;
       align-items: center;
       padding: 10px 0;
-      /* מבטיח שכל שורת תוצאה יושבת בדיוק באותו רוחב/יישור כמו שורת הירוקות */
       width: 100%;
       margin: 0;
-}
+    }
 
     .cell {
-  width: var(--tile);
-  height: var(--tile);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  font-size: 30px;
-  border-bottom: 1.5px solid #111;
-  padding-bottom: 4px;
-  border-radius: 0;
-  }
-
+      width: var(--tile);
+      height: var(--tile);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 30px;
+      border-bottom: 1.5px solid #111;
+      padding-bottom: 4px;
+      border-radius: 0;
+    }
 
     .cell.blank { color: transparent; }
 
-    /* הודעת שגיאה קצרה, אם צריך */
     .warn {
       display: none;
       width: min(100%, var(--w));
@@ -181,256 +193,221 @@
       text-align: right;
     }
 
-    @media (max-width: 360px){
-      :root { --tile: 50px; --gap: 8px; }
-      h1 { font-size: 20px; }
-      .slot input[type="text"], .cell { font-size: 28px; }
+    .selected-letters {
+      margin-top: 10px;
+      min-height: 0;
     }
 
-/* תא שיש בו אות -> ירוק */
-.slot input.filled {
-  background: #2ecc71;
-  border-color: #2ecc71;
-  color: #111;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
-}
+    .selected-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
 
-#pool-note {
-  font-size: 12px;
-  text-align: center;
-  margin-bottom: 6px;
-  color: #444;
-}
+    .yellow-chip {
+      border: 1.5px solid #f1c40f;
+      border-radius: 12px;
+      padding: 10px 0;
+      font-size: 18px;
+      background: #f1c40f;
+      color: #111;
+      text-align: center;
+      font-weight: 700;
+    }
 
-#pool-note .yellow {
-  color: #f1c40f;
-  font-weight: 600;
-}
+    .image-input {
+      margin-top: 14px;
+    }
 
-.pool-wrap {
-  position: relative;
-}
+    .image-drop {
+      display: block;
+      border: 2px dashed #d6d6d6;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      background: #fafafa;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
 
-#pool-fake-placeholder {
-  position: absolute;
-  inset-inline-start: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  font-style: italic;
-  color: #888;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
+    .image-drop:focus-visible,
+    .image-drop:hover {
+      border-color: #111;
+      background: #f2f2f2;
+    }
 
-#pool-fake-placeholder.hidden {
-  opacity: 0;
-}
+    .image-title {
+      font-size: 15px;
+      margin: 0 0 6px;
+    }
 
-#pool-fake-placeholder .yellow {
-  color: #f1c40f;
-  font-weight: 600;
-}
+    .image-help {
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+      text-align: center;
+    }
 
-.image-input {
-  margin-top: 14px;
-}
+    .image-preview {
+      margin-top: 10px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 10px;
+      background: #fff;
+    }
 
-.image-drop {
-  display: block;
-  border: 2px dashed #d6d6d6;
-  border-radius: 16px;
-  padding: 16px;
-  text-align: center;
-  cursor: pointer;
-  background: #fafafa;
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
+    .image-preview.hidden {
+      display: none;
+    }
 
-.image-drop:focus-visible,
-.image-drop:hover {
-  border-color: #111;
-  background: #f2f2f2;
-}
+    .image-preview img {
+      max-width: 100%;
+      border-radius: 12px;
+      display: none;
+      margin: 0 auto;
+    }
 
-.image-title {
-  font-size: 15px;
-  margin: 0 0 6px;
-}
+    .image-preview canvas {
+      width: 100%;
+      border-radius: 12px;
+      display: block;
+      margin: 0 auto;
+      touch-action: manipulation;
+      cursor: crosshair;
+    }
 
-.image-help {
-  font-size: 12px;
-  color: #666;
-  margin-top: 8px;
-  text-align: center;
-}
+    .image-actions {
+      display: flex;
+      justify-content: flex-start;
+      gap: 8px;
+      margin-top: 10px;
+    }
 
-.image-preview {
-  margin-top: 10px;
-  border: 1.5px solid #e0e0e0;
-  border-radius: 12px;
-  padding: 10px;
-  background: #fff;
-}
+    .image-done {
+      border: 1.5px solid #111;
+      border-radius: 999px;
+      padding: 6px 14px;
+      background: #111;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
 
-.image-preview img {
-  max-width: 100%;
-  border-radius: 12px;
-  display: block;
-  margin: 0 auto;
-}
+    .keyboard-status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #555;
+      text-align: center;
+      min-height: 16px;
+    }
 
-.image-preview.empty img {
-  display: none;
-}
+    .hidden {
+      display: none !important;
+    }
 
-.image-preview canvas {
-  width: 100%;
-  border-radius: 12px;
-  display: block;
-  margin: 0 auto;
-  cursor: crosshair;
-}
+    .letter-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 16px;
+    }
 
-.image-preview.empty canvas {
-  display: none;
-}
+    .letter-modal {
+      background: #fff;
+      border-radius: 14px;
+      width: min(100%, 320px);
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
 
-.image-preview-placeholder {
-  font-size: 12px;
-  color: #777;
-  text-align: center;
-}
+    .letter-modal p {
+      margin: 0 0 10px;
+      font-size: 14px;
+      text-align: right;
+    }
 
-.image-actions {
-  display: flex;
-  justify-content: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-}
+    .letter-modal input {
+      width: 100%;
+      text-align: center;
+      font-size: 30px;
+      border: 2px solid #ddd;
+      border-radius: 12px;
+      padding: 8px;
+      outline: none;
+    }
 
-.image-done {
-  border: 1.5px solid #111;
-  border-radius: 999px;
-  padding: 6px 14px;
-  background: #111;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-}
+    .letter-modal input:focus { border-color: #111; }
 
-.image-clear {
-  border: 1.5px solid #d0d0d0;
-  border-radius: 999px;
-  padding: 6px 14px;
-  background: #fff;
-  font-size: 12px;
-  cursor: pointer;
-}
+    .letter-modal-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
 
-.hidden {
-  display: none !important;
-}
+    .letter-modal-actions button {
+      border: 1.5px solid #111;
+      border-radius: 999px;
+      padding: 6px 14px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+    }
 
-.keyboard-status {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #555;
-  text-align: center;
-}
+    .letter-modal-actions .primary {
+      background: #111;
+      color: #fff;
+    }
 
-.available-letters {
-  margin-top: 14px;
-}
-
-.available-title {
-  font-size: 14px;
-  margin-bottom: 8px;
-  text-align: right;
-}
-
-.available-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.letter-chip {
-  border: 1.5px solid #dcdcdc;
-  border-radius: 12px;
-  padding: 10px 0;
-  font-size: 18px;
-  background: #fff;
-  cursor: pointer;
-  transition: transform 0.1s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.letter-chip:active {
-  transform: scale(0.97);
-}
-
-.letter-chip.selected {
-  background: #f39c12;
-  border-color: #f39c12;
-  color: #111;
-}
-
-.letter-chip.available {
-  background: #f1c40f;
-  border-color: #f1c40f;
-  color: #111;
-}
-
+    @media (max-width: 360px) {
+      :root { --tile: 50px; --gap: 8px; }
+      .slot input[type="text"], .cell { font-size: 28px; }
+    }
   </style>
 </head>
-
 <body>
   <div class="wrap">
-        <div class="card">
+    <div class="card">
       <div class="fixedWidth">
-  <div class="row" id="slots"></div>
+        <div class="row" id="slots"></div>
 
-  <div id="known-note">
-    אותיות שמיקומן ידוע (<span class="green">ירוקות</span>)
-  </div>
+        <div id="known-note">
+          אותיות שמיקומן ידוע (<span class="green">ירוקות</span>)
+        </div>
 
- 
-<div class="pool-wrap">
-  <div id="pool-fake-placeholder">
-    אותיות שמיקומן לא ידוע (<span class="yellow">צהובות</span>)
-  </div>
+        <div class="pool-wrap">
+          <div id="pool-fake-placeholder">
+            אותיות שמיקומן לא ידוע (<span class="yellow">צהובות</span>)
+          </div>
+          <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="5" />
+        </div>
 
-  <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="5"
-         autocomplete="off" />
-</div>
+        <div class="selected-letters" id="selected-letters">
+          <div class="selected-grid" id="selected-grid"></div>
+        </div>
 
-<div class="image-input">
-  <label class="image-drop" id="image-drop" for="image-upload" tabindex="0">
-    <div class="image-title">הדבק או העלה את מסך המשחק שלך</div>
-    <div>לחצי/הדביקי כאן תמונה או בחרי קובץ</div>
-    <div class="image-help">תומך בהדבקה (Ctrl+V) או העלאה מהגלריה</div>
-  </label>
-  <input id="image-upload" type="file" accept="image/*" class="hidden" />
-  <div class="image-preview empty" id="image-preview">
-    <div class="image-preview-placeholder" id="image-preview-placeholder">
-      עדיין לא הועלתה תמונה.
-    </div>
-    <img id="image-preview-img" alt="תצוגה מקדימה של המסך שהועלה" />
-    <canvas id="image-preview-canvas"></canvas>
-    <div class="image-actions hidden" id="image-actions">
-      <button type="button" class="image-done" id="image-done">סיימתי לבחור</button>
-      <button type="button" class="image-clear" id="image-clear">הסירי תמונה</button>
-    </div>
-    <div class="keyboard-status hidden" id="keyboard-status"></div>
-  </div>
-</div>
+        <div class="image-input" id="image-input">
+          <label class="image-drop" id="image-drop" for="image-upload" tabindex="0">
+            <div class="image-title">הדבק או העלה את מסך המשחק שלך</div>
+            <div>לחצי/הדביקי כאן תמונה או בחרי קובץ</div>
+            <div class="image-help">תומך בהדבקה (Ctrl+V) או העלאה מהגלריה</div>
+          </label>
+          <input id="image-upload" type="file" accept="image/*" class="hidden" />
 
-<div class="available-letters" id="available-letters">
-  <div class="available-title">אותיות זמינות מהמסך:</div>
-  <div class="available-grid" id="available-grid"></div>
-</div>
-
-</div>
+          <div class="image-preview hidden" id="image-preview">
+            <img id="image-preview-img" alt="תצוגה מקדימה של המסך שהועלה" />
+            <canvas id="image-preview-canvas"></canvas>
+            <div class="image-actions" id="image-actions">
+              <button type="button" class="image-done" id="image-done">סיימתי לבחור</button>
+            </div>
+            <div class="keyboard-status" id="keyboard-status"></div>
+          </div>
+        </div>
+      </div>
 
       <div class="warn" id="warning"></div>
     </div>
@@ -442,14 +419,18 @@
     </div>
   </div>
 
+  <div class="letter-modal-backdrop hidden" id="letter-modal-backdrop">
+    <div class="letter-modal" role="dialog" aria-modal="true" aria-labelledby="letter-modal-title">
+      <p id="letter-modal-title">לא הצלחתי לזהות את האות. הקלידי אות אחת:</p>
+      <input id="letter-modal-input" type="text" inputmode="text" maxlength="1" autocomplete="off" />
+      <div class="letter-modal-actions">
+        <button type="button" id="letter-modal-cancel">ביטול</button>
+        <button type="button" class="primary" id="letter-modal-confirm">אישור</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
