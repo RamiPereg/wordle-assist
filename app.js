@@ -6,6 +6,7 @@ if ("serviceWorker" in navigator) {
 }
 
 const SLOT_COUNT = 5;
+const MAX_YELLOW = 4;
 
 const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
@@ -13,59 +14,34 @@ const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
+const selectedGridEl = document.getElementById("selected-grid");
+const imageInputWrapEl = document.getElementById("image-input");
 const imageUploadEl = document.getElementById("image-upload");
 const imageDropEl = document.getElementById("image-drop");
 const imagePreviewEl = document.getElementById("image-preview");
 const imagePreviewImg = document.getElementById("image-preview-img");
 const imagePreviewCanvas = document.getElementById("image-preview-canvas");
-const imagePreviewPlaceholder = document.getElementById("image-preview-placeholder");
-const imageActionsEl = document.getElementById("image-actions");
 const imageDoneBtn = document.getElementById("image-done");
-const imageClearBtn = document.getElementById("image-clear");
 const keyboardStatusEl = document.getElementById("keyboard-status");
-const availableGridEl = document.getElementById("available-grid");
-const imageInputEl = document.querySelector(".image-input");
+const modalBackdrop = document.getElementById("letter-modal-backdrop");
+const modalInput = document.getElementById("letter-modal-input");
+const modalConfirm = document.getElementById("letter-modal-confirm");
+const modalCancel = document.getElementById("letter-modal-cancel");
 
 let knownNoteTimerStarted = false;
 
-/** ===== State ===== */
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
-const availableLetters = [
-  "א",
-  "ב",
-  "ג",
-  "ד",
-  "ה",
-  "ו",
-  "ז",
-  "ח",
-  "ט",
-  "י",
-  "כ",
-  "ל",
-  "מ",
-  "נ",
-  "ס",
-  "ע",
-  "פ",
-  "צ",
-  "ק",
-  "ר",
-  "ש",
-  "ת",
-];
 
-let detectedAvailableLetters = null;
-let lastImageDataUrl = null;
+const hiddenPatterns = new Set();
+const bannedPositions = new Set();
+
 let previewImage = null;
-let previewMarkers = [];
-let imagePickerDisabled = false;
+let imageSelectionActive = false;
+let imageSelectionCompleted = false;
+let markers = [];
+let imageSelectedLettersUIOnly = [];
+let ocrBusy = false;
 
-// Session-only (מתאפס בריפרש)
-const hiddenPatterns = new Set(); // key של שורה שהועפה בסווייפ
-const bannedPositions = new Set(); // `${letter}|${visualIndex}`  (ויזואלי: 0=ימני ביותר)
-
-/** ===== Minimal injected styles (for menu + swipe feel) ===== */
 (function injectStyles() {
   const css = `
   .pattern-line { position: relative; user-select: none; -webkit-user-select: none; }
@@ -98,41 +74,78 @@ const bannedPositions = new Set(); // `${letter}|${visualIndex}`  (ויזואל�
   document.head.appendChild(style);
 })();
 
-/** ===== Helpers ===== */
+class HebrewOCRHelper {
+  // OCR only a small area around tap for better speed/accuracy vs scanning full screenshot.
+  static async recognizeAtPoint(sourceImage, x, y) {
+    if (!sourceImage || !window.Tesseract) return { success: false };
+
+    const roi = this.buildProcessedROI(sourceImage, x, y);
+    if (!roi) return { success: false };
+
+    try {
+      const result = await window.Tesseract.recognize(roi, "heb", {
+        tessedit_pageseg_mode: "10",
+        tessedit_char_whitelist: "אבגדהוזחטיכלמנסעפצקרשתךםןףץ",
+      });
+
+      const symbols = result.data?.symbols || [];
+      let best = null;
+
+      symbols.forEach((symbol) => {
+        const normalized = normalizeHebrewLetter(symbol.text);
+        if (!normalized) return;
+        if (!best || symbol.confidence > best.confidence) {
+          best = { letter: normalized, confidence: symbol.confidence };
+        }
+      });
+
+      if (!best || best.confidence < 55) return { success: false };
+
+      // Normalize final-form letters to regular forms for internal consistency.
+      return { success: true, letter: best.letter, confidence: best.confidence };
+    } catch {
+      return { success: false };
+    }
+  }
+
+  static buildProcessedROI(sourceImage, x, y) {
+    const cropRadius = 46;
+    const sx = Math.max(0, Math.round(x - cropRadius));
+    const sy = Math.max(0, Math.round(y - cropRadius));
+    const sw = Math.min(sourceImage.width - sx, cropRadius * 2);
+    const sh = Math.min(sourceImage.height - sy, cropRadius * 2);
+    if (sw <= 0 || sh <= 0) return null;
+
+    const upscale = 3;
+    const canvas = document.createElement("canvas");
+    canvas.width = sw * upscale;
+    canvas.height = sh * upscale;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sourceImage, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+    // Grayscale + threshold raise contrast to separate glyph from key background.
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      const bw = gray > 155 ? 255 : 0;
+      data[i] = bw;
+      data[i + 1] = bw;
+      data[i + 2] = bw;
+      data[i + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    return canvas;
+  }
+}
+
 function startKnownNoteFade() {
   if (!knownNoteEl || knownNoteTimerStarted) return;
   knownNoteTimerStarted = true;
-  setTimeout(() => {
-    knownNoteEl.classList.add("hidden");
-  }, 3000);
-}
-
-function sanitizePool(s, maxLen) {
-  // מסירים רווחים ומגבילים לאורך מקסימלי (גם אם מדביקים יותר)
-  const lim = typeof maxLen === "number" ? Math.max(0, maxLen) : 5;
-  return (s || "").replace(/\s+/g, "").slice(0, lim);
-}
-
-function getMaxPoolLen() {
-  return SLOT_COUNT - slots.filter((slot) => slot.fixedChar).length;
-}
-
-function syncAvailableSelection() {
-  if (!availableGridEl) return;
-  const maxLen = getMaxPoolLen();
-  const normalized = sanitizePool(poolEl.value, maxLen);
-  const selected = new Set(normalized.split(""));
-
-  availableGridEl.querySelectorAll(".letter-chip").forEach((chip) => {
-    const letter = chip.dataset.letter;
-    chip.classList.toggle("selected", selected.has(letter));
-  });
-}
-
-function countChars(str) {
-  const m = new Map();
-  for (const ch of str) m.set(ch, (m.get(ch) || 0) + 1);
-  return m;
+  setTimeout(() => knownNoteEl.classList.add("hidden"), 3000);
 }
 
 function setWarning(msg) {
@@ -146,10 +159,75 @@ function setWarning(msg) {
   warningEl.textContent = msg;
 }
 
+function toFinalHebrewLetter(ch) {
+  const map = { כ: "ך", מ: "ם", נ: "ן", פ: "ף", צ: "ץ" };
+  return map[ch] || ch;
+}
+
+function toRegularHebrewLetter(ch) {
+  const map = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
+  return map[ch] || ch;
+}
+
+function normalizeHebrewLetter(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "";
+  const candidate = toRegularHebrewLetter(trimmed[0]);
+  return /^[א-ת]$/.test(candidate) ? candidate : "";
+}
+
+function getMaxPoolLen() {
+  const fixedCount = slots.filter((slot) => slot.fixedChar).length;
+  return Math.max(0, SLOT_COUNT - fixedCount);
+}
+
+function sanitizePool(s, maxLen) {
+  const lim = typeof maxLen === "number" ? Math.max(0, maxLen) : 5;
+  const normalized = (s || "")
+    .replace(/\s+/g, "")
+    .split("")
+    .map((ch) => normalizeHebrewLetter(ch))
+    .filter(Boolean)
+    .join("");
+  return normalized.slice(0, lim);
+}
+
+function syncPoolPlaceholder() {
+  if (poolFakePlaceholder) {
+    poolFakePlaceholder.classList.toggle("hidden", poolEl.value.length > 0);
+  }
+}
+
+function renderSelectedChips() {
+  if (!selectedGridEl) return;
+  selectedGridEl.innerHTML = "";
+  imageSelectedLettersUIOnly.forEach((letter) => {
+    const chip = document.createElement("div");
+    chip.className = "yellow-chip";
+    chip.textContent = letter;
+    selectedGridEl.appendChild(chip);
+  });
+}
+
+function clearSelectedYellowLetters() {
+  imageSelectedLettersUIOnly = [];
+  markers = [];
+  renderSelectedChips();
+}
+
+function setPoolLocked(locked) {
+  poolEl.disabled = !!locked;
+}
+
+function countChars(str) {
+  const m = new Map();
+  for (const ch of str) m.set(ch, (m.get(ch) || 0) + 1);
+  return m;
+}
+
 function combinations(positions, k) {
   const out = [];
   const n = positions.length;
-
   function rec(start, pick, acc) {
     if (pick === 0) {
       out.push(acc.slice());
@@ -161,7 +239,6 @@ function combinations(positions, k) {
       acc.pop();
     }
   }
-
   rec(0, k, []);
   return out;
 }
@@ -169,58 +246,36 @@ function combinations(positions, k) {
 function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   const results = [];
   const chars = [...multisetCounts.keys()].sort((a, b) => a.localeCompare(b));
-
   function backtrack(posIdx) {
     if (posIdx === chosenPositions.length) {
       results.push(baseArr5.slice());
       return;
     }
     const slotIndex = chosenPositions[posIdx];
-
     for (const ch of chars) {
       const remaining = multisetCounts.get(ch) || 0;
       if (remaining <= 0) continue;
-
       multisetCounts.set(ch, remaining - 1);
       baseArr5[slotIndex] = ch;
-
       backtrack(posIdx + 1);
-
       baseArr5[slotIndex] = "";
       multisetCounts.set(ch, remaining);
     }
   }
-
   backtrack(0);
   return results;
 }
 
-function toFinalHebrewLetter(ch) {
-  const map = { כ: "ך", מ: "ם", נ: "ן", פ: "ף", צ: "ץ" };
-  return map[ch] || ch;
-}
-
-function toRegularHebrewLetter(ch) {
-  const map = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
-  return map[ch] || ch;
-}
-
-// מפתח יציב (לא עושה התנגשויות כשהמערך כולל "")
 function makeKey(arr5) {
   return arr5.join("\u0001");
 }
 
-// מיקום "ויזואלי" לפי התאים כפי שהם מופיעים על המסך.
-// במבנה הנוכחי (dir=rtl + grid), התא הראשון שנוצר (i=0) הוא הימני ביותר.
-// לכן visualIndex = logicalIndex.
 function visualIndexFromLogical(logicalIndex) {
   return logicalIndex;
 }
 
-/** ===== Build UI for slots ===== */
 function buildSlotsUI() {
   slotsEl.innerHTML = "";
-
   const inputs = [];
 
   for (let i = 0; i < SLOT_COUNT; i++) {
@@ -231,76 +286,68 @@ function buildSlotsUI() {
     input.type = "text";
     input.maxLength = 1;
     input.setAttribute("aria-label", `אות קבועה בתא ${i + 1}`);
-
     inputs[i] = input;
 
     const initialDisplayChar =
-      (i === SLOT_COUNT - 1 && slots[i].fixedChar)
+      i === SLOT_COUNT - 1 && slots[i].fixedChar
         ? toFinalHebrewLetter(toRegularHebrewLetter(slots[i].fixedChar))
         : toRegularHebrewLetter(slots[i].fixedChar);
 
     input.value = initialDisplayChar;
     input.classList.toggle("filled", !!slots[i].fixedChar);
 
-    // נגיעה על תא ירוק: מוחקת מיד את האות ומאפשרת הקלדה חדשה
     input.addEventListener("pointerdown", (e) => {
       if (!slots[i].fixedChar) return;
-      // מנקים לפני שהמקלדת נפתחת
       e.preventDefault();
       slots[i].fixedChar = "";
       input.value = "";
       input.classList.remove("filled");
       startKnownNoteFade();
+      renderSelectedChips();
+      syncPoolPlaceholder();
       recompute();
-      // מחזירים פוקוס כדי לאפשר הקלדה מיידית
       setTimeout(() => input.focus(), 0);
     });
 
     input.addEventListener("input", () => {
       const v = (input.value || "").trim();
-      slots[i].fixedChar = v ? toRegularHebrewLetter(v.slice(-1)) : "";
-
+      slots[i].fixedChar = v ? normalizeHebrewLetter(v.slice(-1)) : "";
       const displayChar =
-        (i === SLOT_COUNT - 1 && slots[i].fixedChar)
+        i === SLOT_COUNT - 1 && slots[i].fixedChar
           ? toFinalHebrewLetter(slots[i].fixedChar)
           : slots[i].fixedChar;
-
       input.value = displayChar;
       input.classList.toggle("filled", !!slots[i].fixedChar);
-
       startKnownNoteFade();
+      renderSelectedChips();
+      syncPoolPlaceholder();
       recompute();
     });
 
     input.addEventListener("keydown", (e) => {
-      // ניווט ויזואלי
       if (e.key === "ArrowRight") {
         e.preventDefault();
         const next = i - 1;
         if (next >= 0) inputs[next].focus();
         return;
       }
-
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         const next = i + 1;
         if (next < SLOT_COUNT) inputs[next].focus();
         return;
       }
-
       if (e.key === "Backspace") {
         if (input.value && input.value.trim() !== "") return;
-
         const prev = i - 1;
         if (prev < 0) return;
-
         e.preventDefault();
-
         slots[prev].fixedChar = "";
         inputs[prev].value = "";
         inputs[prev].classList.remove("filled");
         inputs[prev].focus();
-
+        renderSelectedChips();
+        syncPoolPlaceholder();
         recompute();
       }
     });
@@ -310,7 +357,6 @@ function buildSlotsUI() {
   }
 }
 
-/** ===== Long-press menu ===== */
 let activeMenuEl = null;
 
 function closeMenu() {
@@ -322,10 +368,8 @@ function closeMenu() {
 
 function openMenuAt(x, y, onBan) {
   closeMenu();
-
   const menu = document.createElement("div");
   menu.className = "wa-menu";
-
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = "האות לא יכולה להיות במיקום הזה";
@@ -333,33 +377,25 @@ function openMenuAt(x, y, onBan) {
     closeMenu();
     onBan();
   });
-
   menu.appendChild(btn);
   document.body.appendChild(menu);
-
-  // מיקום: קצת מעל/מתחת לפי מקום במסך
   const pad = 10;
   const rect = menu.getBoundingClientRect();
   let left = x - rect.width / 2;
   let top = y + 12;
-
   left = Math.max(pad, Math.min(left, window.innerWidth - rect.width - pad));
   top = Math.max(pad, Math.min(top, window.innerHeight - rect.height - pad));
-
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
-
   activeMenuEl = menu;
 }
 
 document.addEventListener("pointerdown", (e) => {
-  // סגירה בלחיצה מחוץ לתפריט
   if (activeMenuEl && !activeMenuEl.contains(e.target)) closeMenu();
 });
 window.addEventListener("scroll", closeMenu, { passive: true });
 window.addEventListener("resize", closeMenu);
 
-/** ===== Swipe to delete ===== */
 function attachSwipeToLine(lineEl, patternKey) {
   let startX = 0;
   let startY = 0;
@@ -368,7 +404,6 @@ function attachSwipeToLine(lineEl, patternKey) {
   let startTime = 0;
   let tracking = false;
 
-  // לא לפגוע בגלילה אנכית רגילה
   lineEl.style.touchAction = "pan-y";
 
   function resetPosition(animated) {
@@ -383,9 +418,7 @@ function attachSwipeToLine(lineEl, patternKey) {
   }
 
   lineEl.addEventListener("pointerdown", (e) => {
-    // אם יש תפריט פתוח, סגור
     closeMenu();
-
     tracking = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -400,14 +433,10 @@ function attachSwipeToLine(lineEl, patternKey) {
     if (!tracking) return;
     dx = e.clientX - startX;
     dy = e.clientY - startY;
-
-    // אם זו תנועה אנכית מובהקת — לא מתערבים
     if (Math.abs(dy) > Math.abs(dx) * 1.2) {
       resetPosition(false);
       return;
     }
-
-    // רק שמאלה
     if (dx < 0) {
       lineEl.style.transform = `translateX(${dx}px)`;
       lineEl.style.background = "#ffe3e3";
@@ -419,19 +448,14 @@ function attachSwipeToLine(lineEl, patternKey) {
   lineEl.addEventListener("pointerup", () => {
     if (!tracking) return;
     tracking = false;
-
     const dt = Date.now() - startTime;
-
-    // סטנדרט: מרחק סף או flick מהיר
     const farEnough = dx < -lineEl.offsetWidth * 0.35;
     const fastFlick = dt < 220 && dx < -45;
-
     if (farEnough || fastFlick) {
       hiddenPatterns.add(patternKey);
       recompute();
       return;
     }
-
     resetPosition(true);
   });
 
@@ -441,12 +465,10 @@ function attachSwipeToLine(lineEl, patternKey) {
   });
 }
 
-/** ===== Render result line ===== */
 function renderPattern(arr5) {
   const patternKey = makeKey(arr5);
   if (hiddenPatterns.has(patternKey)) return null;
 
-  // סינון לפי bannedPositions
   for (let logicalIndex = 0; logicalIndex < SLOT_COUNT; logicalIndex++) {
     const ch = arr5[logicalIndex];
     if (!ch) continue;
@@ -462,13 +484,9 @@ function renderPattern(arr5) {
     span.className = "cell" + (arr5[i] ? "" : " blank");
 
     let raw = arr5[i] ? arr5[i] : "_";
-    // רק התא שמייצג את האות האחרונה במילה (אינדקס אחרון במערך)
-    if (i === SLOT_COUNT - 1 && raw !== "_") {
-      raw = toFinalHebrewLetter(raw);
-    }
+    if (i === SLOT_COUNT - 1 && raw !== "_") raw = toFinalHebrewLetter(raw);
     span.textContent = raw;
 
-    // long press רק אם יש אות אמיתית
     if (arr5[i]) {
       let timer = null;
       let downX = 0;
@@ -479,13 +497,10 @@ function renderPattern(arr5) {
         canceled = false;
         downX = e.clientX;
         downY = e.clientY;
-
         timer = setTimeout(() => {
           if (canceled) return;
-
-          const letter = arr5[i]; // אות רגילה ב-state
+          const letter = arr5[i];
           const visualIndex = visualIndexFromLogical(i);
-
           openMenuAt(e.clientX, e.clientY, () => {
             bannedPositions.add(`${letter}|${visualIndex}`);
             recompute();
@@ -494,7 +509,6 @@ function renderPattern(arr5) {
       });
 
       span.addEventListener("pointermove", (e) => {
-        // אם המשתמש מתחיל לגרור (סווייפ) — מבטלים long press
         const mx = Math.abs(e.clientX - downX);
         const my = Math.abs(e.clientY - downY);
         if (mx > 10 || my > 10) {
@@ -519,59 +533,56 @@ function renderPattern(arr5) {
   return line;
 }
 
-/** ===== Image input + available letters UI ===== */
-function renderAvailableLetters() {
-  if (!availableGridEl) return;
-  availableGridEl.innerHTML = "";
+function setKeyboardStatus(message, isError = false) {
+  if (!keyboardStatusEl) return;
+  keyboardStatusEl.textContent = message || "";
+  keyboardStatusEl.style.color = isError ? "#7a1a1a" : "#555";
+}
 
-  if (!detectedAvailableLetters || detectedAvailableLetters.length === 0) {
-    const empty = document.createElement("div");
-    empty.textContent = "עדיין לא זוהו אותיות זמינות.";
-    empty.style.fontSize = "12px";
-    empty.style.color = "#666";
-    availableGridEl.appendChild(empty);
-    return;
+function clearYellowSelection() {
+  clearSelectedYellowLetters();
+  poolEl.value = "";
+  syncPoolPlaceholder();
+}
+
+function beginImageSelection(dataUrl) {
+  clearYellowSelection();
+  imageSelectionActive = true;
+  imageSelectionCompleted = false;
+  setPoolLocked(true);
+  if (imageInputWrapEl) imageInputWrapEl.classList.remove("hidden");
+  if (imagePreviewEl) imagePreviewEl.classList.remove("hidden");
+  previewImage = new Image();
+  previewImage.onload = () => {
+    imagePreviewImg.src = dataUrl;
+    redrawPreviewCanvas();
+    setKeyboardStatus("לחצי על מקשים בתמונה כדי לבחור אותיות צהובות.");
+  };
+  previewImage.onerror = () => {
+    setWarning("לא הצלחתי להציג את התמונה. נסי שוב עם קובץ אחר.");
+    endImageSelection(false);
+  };
+  previewImage.src = dataUrl;
+}
+
+function endImageSelection(finalize) {
+  if (finalize) {
+    imageSelectionCompleted = true;
   }
-
-  setWarning("");
-
-  for (const letter of detectedAvailableLetters) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "letter-chip";
-    btn.textContent = letter;
-    btn.dataset.letter = letter;
-    btn.classList.add("available");
-
-    btn.addEventListener("click", () => {
-      const maxLen = getMaxPoolLen();
-      const normalized = sanitizePool(poolEl.value, maxLen);
-      const isSelected = normalized.includes(letter);
-
-      if (!isSelected && normalized.length >= maxLen) {
-        setWarning("אין עוד מקום לאותיות צהובות. מחקי אות קיימת או הוסיפי ירוקות.");
-        return;
-      }
-
-      if (isSelected) {
-        poolEl.value = normalized.replace(letter, "");
-      } else {
-        poolEl.value = normalized + letter;
-      }
-
-      if (poolFakePlaceholder) {
-        poolFakePlaceholder.classList.toggle("hidden", poolEl.value.length > 0);
-      }
-
-      setWarning("");
-      recompute();
-      syncAvailableSelection();
-    });
-
-    availableGridEl.appendChild(btn);
+  imageSelectionActive = false;
+  previewImage = null;
+  if (imagePreviewEl) imagePreviewEl.classList.add("hidden");
+  if (imagePreviewImg) imagePreviewImg.src = "";
+  if (imagePreviewCanvas) {
+    const ctx = imagePreviewCanvas.getContext("2d");
+    ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
   }
-
-  syncAvailableSelection();
+  if (imageUploadEl) imageUploadEl.value = "";
+  setKeyboardStatus("");
+  if (finalize && imageInputWrapEl) imageInputWrapEl.classList.add("hidden");
+  setPoolLocked(false);
+  syncPoolPlaceholder();
+  recompute();
 }
 
 function redrawPreviewCanvas() {
@@ -582,10 +593,10 @@ function redrawPreviewCanvas() {
   ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
   ctx.drawImage(previewImage, 0, 0);
 
-  previewMarkers.forEach((marker) => {
+  markers.forEach((marker) => {
     ctx.beginPath();
-    ctx.arc(marker.x, marker.y, 16, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(241, 196, 15, 0.45)";
+    ctx.arc(marker.x, marker.y, 19, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(241, 196, 15, 0.35)";
     ctx.strokeStyle = "#f1c40f";
     ctx.lineWidth = 3;
     ctx.fill();
@@ -593,82 +604,137 @@ function redrawPreviewCanvas() {
   });
 }
 
-function addDetectedLetter(letter) {
-  if (!letter) return;
-  if (!detectedAvailableLetters) detectedAvailableLetters = [];
-  if (!detectedAvailableLetters.includes(letter)) {
-    detectedAvailableLetters.push(letter);
-    detectedAvailableLetters.sort((a, b) => a.localeCompare(b));
+function markerAtPoint(x, y) {
+  const threshold = 26;
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i];
+    const d = Math.hypot(m.x - x, m.y - y);
+    if (d <= threshold) return i;
   }
-  setWarning("");
-  renderAvailableLetters();
+  return -1;
 }
 
-function showPreview(dataUrl) {
-  if (!imagePreviewEl || !imagePreviewImg) return;
-  imagePreviewImg.onload = null;
-  imagePreviewImg.onerror = null;
-  imagePreviewImg.onload = () => {
-    imagePreviewEl.classList.remove("empty");
-    imageActionsEl?.classList.remove("hidden");
-    imagePreviewPlaceholder?.classList.add("hidden");
-    imagePreviewImg.classList.add("hidden");
-    if (keyboardStatusEl) {
-      keyboardStatusEl.textContent = "לחצי על האותיות במקלדת שבתמונה כדי לסמן אותיות זמינות.";
-      keyboardStatusEl.classList.remove("hidden");
+function removeLetterAndMarkerByIndex(index) {
+  const marker = markers[index];
+  if (!marker) return;
+  markers.splice(index, 1);
+  imageSelectedLettersUIOnly = imageSelectedLettersUIOnly.filter((ch) => ch !== marker.letter);
+  renderSelectedChips();
+  redrawPreviewCanvas();
+}
+
+function addLetterAndMarker(letter, x, y) {
+  const normalized = normalizeHebrewLetter(letter);
+  if (!normalized) return false;
+  const maxLen = Math.min(getMaxPoolLen(), MAX_YELLOW);
+
+  if (imageSelectedLettersUIOnly.includes(normalized)) {
+    setKeyboardStatus("האות כבר נוספה.");
+    return false;
+  }
+  if (imageSelectedLettersUIOnly.length >= maxLen) {
+    setKeyboardStatus(`אפשר לבחור עד ${maxLen} אותיות צהובות.`, true);
+    return false;
+  }
+
+  imageSelectedLettersUIOnly.push(normalized);
+  markers.push({ x, y, letter: normalized });
+  renderSelectedChips();
+  syncPoolPlaceholder();
+  redrawPreviewCanvas();
+  return true;
+}
+
+function openManualLetterModal() {
+  return new Promise((resolve) => {
+    if (!modalBackdrop || !modalInput || !modalConfirm || !modalCancel) {
+      resolve("");
+      return;
     }
-  };
-  imagePreviewImg.onerror = () => {
-    setWarning("לא הצלחתי להציג את התמונה. נסי שוב עם קובץ אחר.");
-    clearPreview();
-  };
-  imagePreviewImg.src = dataUrl;
-  lastImageDataUrl = dataUrl;
-  detectedAvailableLetters = null;
-  previewMarkers = [];
-  imagePickerDisabled = false;
-  previewImage = new Image();
-  previewImage.onload = () => {
-    redrawPreviewCanvas();
-  };
-  previewImage.src = dataUrl;
-  renderAvailableLetters();
-  setWarning("");
+
+    modalInput.value = "";
+    modalBackdrop.classList.remove("hidden");
+    setTimeout(() => modalInput.focus(), 0);
+
+    const close = (value) => {
+      modalBackdrop.classList.add("hidden");
+      modalConfirm.removeEventListener("click", onConfirm);
+      modalCancel.removeEventListener("click", onCancel);
+      modalInput.removeEventListener("keydown", onKeyDown);
+      modalBackdrop.removeEventListener("click", onBackdrop);
+      resolve(value);
+    };
+
+    const onConfirm = () => close(normalizeHebrewLetter(modalInput.value));
+    const onCancel = () => close("");
+    const onKeyDown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        onConfirm();
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    const onBackdrop = (e) => {
+      if (e.target === modalBackdrop) onCancel();
+    };
+
+    modalConfirm.addEventListener("click", onConfirm);
+    modalCancel.addEventListener("click", onCancel);
+    modalInput.addEventListener("keydown", onKeyDown);
+    modalBackdrop.addEventListener("click", onBackdrop);
+  });
 }
 
-function clearPreview() {
-  if (!imagePreviewEl || !imagePreviewImg) return;
-  imagePreviewImg.src = "";
-  imagePreviewEl.classList.add("empty");
-  imageActionsEl?.classList.add("hidden");
-  imagePreviewPlaceholder?.classList.remove("hidden");
-  imagePreviewImg.classList.remove("hidden");
-  if (keyboardStatusEl) {
-    keyboardStatusEl.classList.add("hidden");
-    keyboardStatusEl.textContent = "";
+async function recognizeLetterAtPoint(x, y) {
+  if (!previewImage) return "";
+  const ocrResult = await HebrewOCRHelper.recognizeAtPoint(previewImage, x, y);
+  return ocrResult.success ? ocrResult.letter : "";
+}
+
+async function handleCanvasTap(event) {
+  if (!imageSelectionActive || !previewImage || !imagePreviewCanvas || ocrBusy) return;
+  const rect = imagePreviewCanvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const point = event.touches && event.touches[0] ? event.touches[0] : event;
+  const scaleX = imagePreviewCanvas.width / rect.width;
+  const scaleY = imagePreviewCanvas.height / rect.height;
+  const x = (point.clientX - rect.left) * scaleX;
+  const y = (point.clientY - rect.top) * scaleY;
+
+  const existingMarkerIndex = markerAtPoint(x, y);
+  if (existingMarkerIndex >= 0) {
+    const removed = markers[existingMarkerIndex]?.letter || "";
+    removeLetterAndMarkerByIndex(existingMarkerIndex);
+    setKeyboardStatus(removed ? `הוסרה האות: ${removed}` : "הסימון הוסר.");
+    return;
   }
-  if (!imagePickerDisabled) {
-    detectedAvailableLetters = null;
+
+  ocrBusy = true;
+  setKeyboardStatus("מזהה את האות שנבחרה…");
+  let letter = await recognizeLetterAtPoint(x, y);
+  if (!letter) {
+    setKeyboardStatus("לא זוהתה אות. הזיני ידנית.", true);
+    letter = await openManualLetterModal();
   }
-  lastImageDataUrl = null;
-  previewMarkers = [];
-  if (imagePickerDisabled) {
-    if (imageInputEl) imageInputEl.classList.add("hidden");
-  } else if (imageInputEl) {
-    imageInputEl.classList.remove("hidden");
+
+  if (!letter) {
+    setKeyboardStatus("לא נבחרה אות תקינה.", true);
+    ocrBusy = false;
+    return;
   }
-  previewImage = null;
-  if (imagePreviewCanvas) {
-    const ctx = imagePreviewCanvas.getContext("2d");
-    ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
-  }
-  renderAvailableLetters();
-  if (imageUploadEl) imageUploadEl.value = "";
+
+  const added = addLetterAndMarker(letter, x, y);
+  setKeyboardStatus(added ? `נבחרה האות: ${letter}` : "לא נוספה אות חדשה.");
+  ocrBusy = false;
 }
 
 function handleImageFile(file) {
   if (!file) return;
-  if (imagePickerDisabled) return;
+  if (imageSelectionCompleted) return;
   if (!file.type.startsWith("image/")) {
     setWarning("זה לא קובץ תמונה. נסי לבחור או להדביק תמונה בלבד.");
     return;
@@ -676,89 +742,12 @@ function handleImageFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     if (typeof reader.result === "string") {
-      showPreview(reader.result);
+      setWarning("");
+      beginImageSelection(reader.result);
     }
   };
   reader.readAsDataURL(file);
 }
-
-function setKeyboardStatus(message, isError = false) {
-  if (!keyboardStatusEl) return;
-  keyboardStatusEl.textContent = message;
-  keyboardStatusEl.style.color = isError ? "#7a1a1a" : "#555";
-  keyboardStatusEl.classList.remove("hidden");
-}
-
-function normalizeHebrewLetter(value) {
-  const trimmed = (value || "").trim();
-  if (!trimmed) return "";
-  const candidate = toRegularHebrewLetter(trimmed[0]);
-  return /^[א-ת]$/.test(candidate) ? candidate : "";
-}
-
-async function recognizeLetterAtPoint(x, y) {
-  if (!previewImage) return "";
-  if (!window.Tesseract) return "";
-
-  const cropRadius = 40;
-  const sx = Math.max(0, Math.round(x - cropRadius));
-  const sy = Math.max(0, Math.round(y - cropRadius));
-  const sw = Math.min(previewImage.width - sx, cropRadius * 2);
-  const sh = Math.min(previewImage.height - sy, cropRadius * 2);
-
-  const cropCanvas = document.createElement("canvas");
-  cropCanvas.width = sw;
-  cropCanvas.height = sh;
-  const ctx = cropCanvas.getContext("2d");
-  ctx.drawImage(previewImage, sx, sy, sw, sh, 0, 0, sw, sh);
-
-  try {
-    const result = await window.Tesseract.recognize(cropCanvas, "heb");
-    const symbols = result.data?.symbols || [];
-    let best = null;
-    symbols.forEach((symbol) => {
-      const candidate = normalizeHebrewLetter(symbol.text);
-      if (!candidate) return;
-      if (!best || symbol.confidence > best.confidence) {
-        best = { text: candidate, confidence: symbol.confidence };
-      }
-    });
-    if (best && best.confidence >= 60) {
-      return best.text;
-    }
-  } catch (err) {
-    return "";
-  }
-  return "";
-}
-
-async function handlePreviewClick(event) {
-  if (!imagePreviewCanvas || !previewImage) return;
-  if (imagePickerDisabled) return;
-  const rect = imagePreviewCanvas.getBoundingClientRect();
-  const scaleX = imagePreviewCanvas.width / rect.width;
-  const scaleY = imagePreviewCanvas.height / rect.height;
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
-
-  setKeyboardStatus("מזהה את האות שנבחרה…");
-  let letter = await recognizeLetterAtPoint(x, y);
-  if (!letter) {
-    const manual = prompt("לא הצלחתי לזהות את האות. כתבי אותה כאן:");
-    letter = normalizeHebrewLetter(manual);
-  }
-
-  if (!letter) {
-    setKeyboardStatus("לא נבחרה אות תקינה. נסי שוב.", true);
-    return;
-  }
-
-  previewMarkers.push({ x, y });
-  redrawPreviewCanvas();
-  addDetectedLetter(letter);
-  setKeyboardStatus(`נבחרה האות: ${letter}`);
-}
-
 
 if (imageUploadEl) {
   imageUploadEl.addEventListener("change", (e) => {
@@ -775,9 +764,7 @@ if (imageDropEl) {
     }
   });
 
-  imageDropEl.addEventListener("dragover", (e) => {
-    e.preventDefault();
-  });
+  imageDropEl.addEventListener("dragover", (e) => e.preventDefault());
 
   imageDropEl.addEventListener("drop", (e) => {
     e.preventDefault();
@@ -786,22 +773,17 @@ if (imageDropEl) {
   });
 }
 
-if (imageClearBtn) {
-  imageClearBtn.addEventListener("click", () => {
-    clearPreview();
-  });
-}
-
 if (imageDoneBtn) {
   imageDoneBtn.addEventListener("click", () => {
-    imagePickerDisabled = true;
-    clearPreview();
+    if (!imageSelectionActive) return;
+    endImageSelection(true);
   });
 }
 
 if (imagePreviewCanvas) {
-  imagePreviewCanvas.addEventListener("click", (event) => {
-    handlePreviewClick(event);
+  imagePreviewCanvas.addEventListener("pointerup", (event) => {
+    event.preventDefault();
+    handleCanvasTap(event);
   });
 }
 
@@ -818,11 +800,10 @@ document.addEventListener("paste", (e) => {
   }
 });
 
-/** ===== Main compute ===== */
 function recompute() {
-  // Base array with fixed chars
   const base = Array.from({ length: SLOT_COUNT }, () => "");
   const fixedPositions = new Set();
+
   for (let i = 0; i < SLOT_COUNT; i++) {
     const ch = slots[i].fixedChar;
     if (ch) {
@@ -831,16 +812,16 @@ function recompute() {
     }
   }
 
-  // Normalize pool input (אחרי שיודעים כמה ירוקות יש): סה"כ 5 אותיות בין ירוקות+צהובות
-  const fixedCount = fixedPositions.size;
-  const maxPoolLen = SLOT_COUNT - fixedCount; // כמה "צהובות" מותר לכל היותר
-  const normalized = sanitizePool(poolEl.value, maxPoolLen);
-  if (poolEl.value !== normalized) poolEl.value = normalized;
+  const maxPoolLen = Math.min(SLOT_COUNT - fixedPositions.size, MAX_YELLOW);
+  const normalizedManual = sanitizePool(poolEl.value, imageSelectionActive ? 0 : maxPoolLen);
+  if (poolEl.value !== normalizedManual) poolEl.value = normalizedManual;
 
-  const pool = normalized;
+  renderSelectedChips();
+  syncPoolPlaceholder();
+
+  const pool = normalizedManual;
   const poolCounts = countChars(pool);
 
-  // Free positions
   const freePositions = [];
   for (let i = 0; i < SLOT_COUNT; i++) {
     if (!fixedPositions.has(i)) freePositions.push(i);
@@ -852,36 +833,29 @@ function recompute() {
 
   const k = pool.length;
 
-  // אם אין אותיות ידועות — מציגים תבנית אחת: קבועות, והשאר ריק
   if (k === 0) {
     const line = renderPattern(base.slice());
     if (line) resultsEl.appendChild(line);
     return;
   }
 
-  // אם הזנת יותר אותיות ממספר החורים — שגיאה
   if (k > freePositions.length) {
-    setWarning(
-      `הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`
-    );
+    setWarning(`הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`);
     return;
   }
 
   const chosenSets = combinations(freePositions, k);
-
   const uniq = new Set();
   const frag = document.createDocumentFragment();
 
   for (const chosen of chosenSets) {
     const baseCopy = base.slice();
     const ms = new Map(poolCounts);
-
     const placements = generatePlacements(baseCopy, chosen, ms);
     for (const arr of placements) {
       const key = makeKey(arr);
       if (uniq.has(key)) continue;
       uniq.add(key);
-
       const line = renderPattern(arr);
       if (line) frag.appendChild(line);
     }
@@ -890,16 +864,20 @@ function recompute() {
   resultsEl.appendChild(frag);
 }
 
-/** ===== Init ===== */
 buildSlotsUI();
-renderAvailableLetters();
+renderSelectedChips();
+syncPoolPlaceholder();
 
 poolEl.addEventListener("input", () => {
-  if (poolFakePlaceholder) {
-    poolFakePlaceholder.classList.toggle("hidden", poolEl.value.length > 0);
+  if (imageSelectionActive) {
+    syncPoolPlaceholder();
+    return;
   }
+  const maxLen = Math.min(getMaxPoolLen(), MAX_YELLOW);
+  const normalized = sanitizePool(poolEl.value, maxLen);
+  if (poolEl.value !== normalized) poolEl.value = normalized;
+  syncPoolPlaceholder();
   recompute();
-  syncAvailableSelection();
 });
 
 recompute();
