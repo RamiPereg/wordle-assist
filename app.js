@@ -15,18 +15,12 @@ const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
 const selectedGridEl = document.getElementById("selected-grid");
-const imageInputWrapEl = document.getElementById("image-input");
 const imageUploadEl = document.getElementById("image-upload");
-const imageDropEl = document.getElementById("image-drop");
-const imagePreviewEl = document.getElementById("image-preview");
-const imagePreviewImg = document.getElementById("image-preview-img");
-const imagePreviewCanvas = document.getElementById("image-preview-canvas");
-const imageDoneBtn = document.getElementById("image-done");
-const keyboardStatusEl = document.getElementById("keyboard-status");
-const modalBackdrop = document.getElementById("letter-modal-backdrop");
-const modalInput = document.getElementById("letter-modal-input");
-const modalConfirm = document.getElementById("letter-modal-confirm");
-const modalCancel = document.getElementById("letter-modal-cancel");
+const imageNoteWrapEl = document.getElementById("image-note-wrap");
+const imageNoteEmptyEl = document.getElementById("image-note-empty");
+const imageNoteImgEl = document.getElementById("image-note-img");
+const imageNoteCloseEl = document.getElementById("image-note-close");
+const imageNoteShowEl = document.getElementById("image-note-show");
 
 let knownNoteTimerStarted = false;
 
@@ -35,12 +29,9 @@ const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
 const hiddenPatterns = new Set();
 const bannedPositions = new Set();
 
-let previewImage = null;
-let imageSelectionActive = false;
-let imageSelectionCompleted = false;
-let markers = [];
 let imageSelectedLettersUIOnly = [];
-let ocrBusy = false;
+let passiveImageDataUrl = "";
+let imageContainerHidden = false;
 
 (function injectStyles() {
   const css = `
@@ -73,74 +64,6 @@ let ocrBusy = false;
   style.textContent = css;
   document.head.appendChild(style);
 })();
-
-class HebrewOCRHelper {
-  // OCR only a small area around tap for better speed/accuracy vs scanning full screenshot.
-  static async recognizeAtPoint(sourceImage, x, y) {
-    if (!sourceImage || !window.Tesseract) return { success: false };
-
-    const roi = this.buildProcessedROI(sourceImage, x, y);
-    if (!roi) return { success: false };
-
-    try {
-      const result = await window.Tesseract.recognize(roi, "heb", {
-        tessedit_pageseg_mode: "10",
-        tessedit_char_whitelist: "אבגדהוזחטיכלמנסעפצקרשתךםןףץ",
-      });
-
-      const symbols = result.data?.symbols || [];
-      let best = null;
-
-      symbols.forEach((symbol) => {
-        const normalized = normalizeHebrewLetter(symbol.text);
-        if (!normalized) return;
-        if (!best || symbol.confidence > best.confidence) {
-          best = { letter: normalized, confidence: symbol.confidence };
-        }
-      });
-
-      if (!best || best.confidence < 55) return { success: false };
-
-      // Normalize final-form letters to regular forms for internal consistency.
-      return { success: true, letter: best.letter, confidence: best.confidence };
-    } catch {
-      return { success: false };
-    }
-  }
-
-  static buildProcessedROI(sourceImage, x, y) {
-    const cropRadius = 46;
-    const sx = Math.max(0, Math.round(x - cropRadius));
-    const sy = Math.max(0, Math.round(y - cropRadius));
-    const sw = Math.min(sourceImage.width - sx, cropRadius * 2);
-    const sh = Math.min(sourceImage.height - sy, cropRadius * 2);
-    if (sw <= 0 || sh <= 0) return null;
-
-    const upscale = 3;
-    const canvas = document.createElement("canvas");
-    canvas.width = sw * upscale;
-    canvas.height = sh * upscale;
-
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(sourceImage, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-
-    // Grayscale + threshold raise contrast to separate glyph from key background.
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imgData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-      const bw = gray > 155 ? 255 : 0;
-      data[i] = bw;
-      data[i + 1] = bw;
-      data[i + 2] = bw;
-      data[i + 3] = 255;
-    }
-    ctx.putImageData(imgData, 0, 0);
-
-    return canvas;
-  }
-}
 
 function startKnownNoteFade() {
   if (!knownNoteEl || knownNoteTimerStarted) return;
@@ -207,16 +130,6 @@ function renderSelectedChips() {
     chip.textContent = letter;
     selectedGridEl.appendChild(chip);
   });
-}
-
-function clearSelectedYellowLetters() {
-  imageSelectedLettersUIOnly = [];
-  markers = [];
-  renderSelectedChips();
-}
-
-function setPoolLocked(locked) {
-  poolEl.disabled = !!locked;
 }
 
 function countChars(str) {
@@ -533,217 +446,43 @@ function renderPattern(arr5) {
   return line;
 }
 
-function setKeyboardStatus(message, isError = false) {
-  if (!keyboardStatusEl) return;
-  keyboardStatusEl.textContent = message || "";
-  keyboardStatusEl.style.color = isError ? "#7a1a1a" : "#555";
-}
+function renderPassiveImage() {
+  if (!imageNoteWrapEl || !imageNoteShowEl || !imageNoteImgEl || !imageNoteEmptyEl) return;
 
-function clearYellowSelection() {
-  clearSelectedYellowLetters();
-  poolEl.value = "";
-  syncPoolPlaceholder();
-}
-
-function beginImageSelection(dataUrl) {
-  clearYellowSelection();
-  imageSelectionActive = true;
-  imageSelectionCompleted = false;
-  setPoolLocked(true);
-  if (imageInputWrapEl) imageInputWrapEl.classList.remove("hidden");
-  if (imagePreviewEl) imagePreviewEl.classList.remove("hidden");
-  previewImage = new Image();
-  previewImage.onload = () => {
-    imagePreviewImg.src = dataUrl;
-    redrawPreviewCanvas();
-    setKeyboardStatus("לחצי על מקשים בתמונה כדי לבחור אותיות צהובות.");
-  };
-  previewImage.onerror = () => {
-    setWarning("לא הצלחתי להציג את התמונה. נסי שוב עם קובץ אחר.");
-    endImageSelection(false);
-  };
-  previewImage.src = dataUrl;
-}
-
-function endImageSelection(finalize) {
-  if (finalize) {
-    imageSelectionCompleted = true;
-  }
-  imageSelectionActive = false;
-  previewImage = null;
-  if (imagePreviewEl) imagePreviewEl.classList.add("hidden");
-  if (imagePreviewImg) imagePreviewImg.src = "";
-  if (imagePreviewCanvas) {
-    const ctx = imagePreviewCanvas.getContext("2d");
-    ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
-  }
-  if (imageUploadEl) imageUploadEl.value = "";
-  setKeyboardStatus("");
-  if (finalize && imageInputWrapEl) imageInputWrapEl.classList.add("hidden");
-  setPoolLocked(false);
-  syncPoolPlaceholder();
-  recompute();
-}
-
-function redrawPreviewCanvas() {
-  if (!imagePreviewCanvas || !previewImage) return;
-  const ctx = imagePreviewCanvas.getContext("2d");
-  imagePreviewCanvas.width = previewImage.width;
-  imagePreviewCanvas.height = previewImage.height;
-  ctx.clearRect(0, 0, imagePreviewCanvas.width, imagePreviewCanvas.height);
-  ctx.drawImage(previewImage, 0, 0);
-
-  markers.forEach((marker) => {
-    ctx.beginPath();
-    ctx.arc(marker.x, marker.y, 19, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(241, 196, 15, 0.35)";
-    ctx.strokeStyle = "#f1c40f";
-    ctx.lineWidth = 3;
-    ctx.fill();
-    ctx.stroke();
-  });
-}
-
-function markerAtPoint(x, y) {
-  const threshold = 26;
-  for (let i = 0; i < markers.length; i++) {
-    const m = markers[i];
-    const d = Math.hypot(m.x - x, m.y - y);
-    if (d <= threshold) return i;
-  }
-  return -1;
-}
-
-function removeLetterAndMarkerByIndex(index) {
-  const marker = markers[index];
-  if (!marker) return;
-  markers.splice(index, 1);
-  imageSelectedLettersUIOnly = imageSelectedLettersUIOnly.filter((ch) => ch !== marker.letter);
-  renderSelectedChips();
-  redrawPreviewCanvas();
-}
-
-function addLetterAndMarker(letter, x, y) {
-  const normalized = normalizeHebrewLetter(letter);
-  if (!normalized) return false;
-  const maxLen = Math.min(getMaxPoolLen(), MAX_YELLOW);
-
-  if (imageSelectedLettersUIOnly.includes(normalized)) {
-    setKeyboardStatus("האות כבר נוספה.");
-    return false;
-  }
-  if (imageSelectedLettersUIOnly.length >= maxLen) {
-    setKeyboardStatus(`אפשר לבחור עד ${maxLen} אותיות צהובות.`, true);
-    return false;
-  }
-
-  imageSelectedLettersUIOnly.push(normalized);
-  markers.push({ x, y, letter: normalized });
-  renderSelectedChips();
-  syncPoolPlaceholder();
-  redrawPreviewCanvas();
-  return true;
-}
-
-function openManualLetterModal() {
-  return new Promise((resolve) => {
-    if (!modalBackdrop || !modalInput || !modalConfirm || !modalCancel) {
-      resolve("");
-      return;
-    }
-
-    modalInput.value = "";
-    modalBackdrop.classList.remove("hidden");
-    setTimeout(() => modalInput.focus(), 0);
-
-    const close = (value) => {
-      modalBackdrop.classList.add("hidden");
-      modalConfirm.removeEventListener("click", onConfirm);
-      modalCancel.removeEventListener("click", onCancel);
-      modalInput.removeEventListener("keydown", onKeyDown);
-      modalBackdrop.removeEventListener("click", onBackdrop);
-      resolve(value);
-    };
-
-    const onConfirm = () => close(normalizeHebrewLetter(modalInput.value));
-    const onCancel = () => close("");
-    const onKeyDown = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        onConfirm();
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    const onBackdrop = (e) => {
-      if (e.target === modalBackdrop) onCancel();
-    };
-
-    modalConfirm.addEventListener("click", onConfirm);
-    modalCancel.addEventListener("click", onCancel);
-    modalInput.addEventListener("keydown", onKeyDown);
-    modalBackdrop.addEventListener("click", onBackdrop);
-  });
-}
-
-async function recognizeLetterAtPoint(x, y) {
-  if (!previewImage) return "";
-  const ocrResult = await HebrewOCRHelper.recognizeAtPoint(previewImage, x, y);
-  return ocrResult.success ? ocrResult.letter : "";
-}
-
-async function handleCanvasTap(event) {
-  if (!imageSelectionActive || !previewImage || !imagePreviewCanvas || ocrBusy) return;
-  const rect = imagePreviewCanvas.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-
-  const point = event.touches && event.touches[0] ? event.touches[0] : event;
-  const scaleX = imagePreviewCanvas.width / rect.width;
-  const scaleY = imagePreviewCanvas.height / rect.height;
-  const x = (point.clientX - rect.left) * scaleX;
-  const y = (point.clientY - rect.top) * scaleY;
-
-  const existingMarkerIndex = markerAtPoint(x, y);
-  if (existingMarkerIndex >= 0) {
-    const removed = markers[existingMarkerIndex]?.letter || "";
-    removeLetterAndMarkerByIndex(existingMarkerIndex);
-    setKeyboardStatus(removed ? `הוסרה האות: ${removed}` : "הסימון הוסר.");
+  if (imageContainerHidden) {
+    imageNoteWrapEl.classList.add("hidden");
+    imageNoteShowEl.classList.remove("hidden");
     return;
   }
 
-  ocrBusy = true;
-  setKeyboardStatus("מזהה את האות שנבחרה…");
-  let letter = await recognizeLetterAtPoint(x, y);
-  if (!letter) {
-    setKeyboardStatus("לא זוהתה אות. הזיני ידנית.", true);
-    letter = await openManualLetterModal();
-  }
+  imageNoteWrapEl.classList.remove("hidden");
+  imageNoteShowEl.classList.add("hidden");
 
-  if (!letter) {
-    setKeyboardStatus("לא נבחרה אות תקינה.", true);
-    ocrBusy = false;
-    return;
+  if (passiveImageDataUrl) {
+    imageNoteImgEl.src = passiveImageDataUrl;
+    imageNoteImgEl.classList.remove("hidden");
+    imageNoteEmptyEl.classList.add("hidden");
+  } else {
+    imageNoteImgEl.src = "";
+    imageNoteImgEl.classList.add("hidden");
+    imageNoteEmptyEl.classList.remove("hidden");
   }
+}
 
-  const added = addLetterAndMarker(letter, x, y);
-  setKeyboardStatus(added ? `נבחרה האות: ${letter}` : "לא נוספה אות חדשה.");
-  ocrBusy = false;
+function setPassiveImage(dataUrl) {
+  passiveImageDataUrl = dataUrl || "";
+  imageContainerHidden = false;
+  renderPassiveImage();
 }
 
 function handleImageFile(file) {
   if (!file) return;
-  if (imageSelectionCompleted) return;
-  if (!file.type.startsWith("image/")) {
-    setWarning("זה לא קובץ תמונה. נסי לבחור או להדביק תמונה בלבד.");
-    return;
-  }
+  if (!file.type.startsWith("image/")) return;
+
   const reader = new FileReader();
   reader.onload = () => {
     if (typeof reader.result === "string") {
-      setWarning("");
-      beginImageSelection(reader.result);
+      setPassiveImage(reader.result);
     }
   };
   reader.readAsDataURL(file);
@@ -756,34 +495,24 @@ if (imageUploadEl) {
   });
 }
 
-if (imageDropEl) {
-  imageDropEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      imageUploadEl?.click();
-    }
-  });
-
-  imageDropEl.addEventListener("dragover", (e) => e.preventDefault());
-
-  imageDropEl.addEventListener("drop", (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer?.files && e.dataTransfer.files[0];
-    handleImageFile(file);
+if (imageNoteWrapEl) {
+  imageNoteWrapEl.addEventListener("click", () => {
+    imageUploadEl?.click();
   });
 }
 
-if (imageDoneBtn) {
-  imageDoneBtn.addEventListener("click", () => {
-    if (!imageSelectionActive) return;
-    endImageSelection(true);
+if (imageNoteCloseEl) {
+  imageNoteCloseEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    imageContainerHidden = true;
+    renderPassiveImage();
   });
 }
 
-if (imagePreviewCanvas) {
-  imagePreviewCanvas.addEventListener("pointerup", (event) => {
-    event.preventDefault();
-    handleCanvasTap(event);
+if (imageNoteShowEl) {
+  imageNoteShowEl.addEventListener("click", () => {
+    imageContainerHidden = false;
+    renderPassiveImage();
   });
 }
 
@@ -813,7 +542,7 @@ function recompute() {
   }
 
   const maxPoolLen = Math.min(SLOT_COUNT - fixedPositions.size, MAX_YELLOW);
-  const normalizedManual = sanitizePool(poolEl.value, imageSelectionActive ? 0 : maxPoolLen);
+  const normalizedManual = sanitizePool(poolEl.value, maxPoolLen);
   if (poolEl.value !== normalizedManual) poolEl.value = normalizedManual;
 
   renderSelectedChips();
@@ -867,12 +596,9 @@ function recompute() {
 buildSlotsUI();
 renderSelectedChips();
 syncPoolPlaceholder();
+renderPassiveImage();
 
 poolEl.addEventListener("input", () => {
-  if (imageSelectionActive) {
-    syncPoolPlaceholder();
-    return;
-  }
   const maxLen = Math.min(getMaxPoolLen(), MAX_YELLOW);
   const normalized = sanitizePool(poolEl.value, maxLen);
   if (poolEl.value !== normalized) poolEl.value = normalized;
