@@ -245,10 +245,32 @@
     }
 
     .image-note-empty {
-      padding: 24px 12px;
+      padding: 24px 12px 4px;
       text-align: center;
       font-size: 13px;
       color: #888;
+    }
+
+    .image-note-hint {
+      text-align: center;
+      font-size: 11px;
+      color: #b0b0b0;
+      margin-bottom: 10px;
+    }
+
+    .image-paste-target {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      border: 0;
+      padding: 0;
+      resize: none;
+      background: transparent;
+      color: transparent;
     }
 
     .image-note-img {
@@ -314,6 +336,8 @@
           <div class="image-note-wrap" id="image-note-wrap">
             <button type="button" class="image-note-close" id="image-note-close" aria-label="סגירת תמונה">×</button>
             <div class="image-note-empty" id="image-note-empty">Paste or upload an image</div>
+            <div class="image-note-hint" id="image-note-hint">iPhone / Android: לחיצה ארוכה כאן להדבקה</div>
+            <textarea id="image-paste-target" class="image-paste-target" aria-label="יעד הדבקה מוסתר"></textarea>
             <img class="image-note-img hidden" id="image-note-img" alt="תמונת עזר" />
           </div>
           <button type="button" class="image-note-show hidden" id="image-note-show">Show image</button>
@@ -328,4 +352,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
