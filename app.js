@@ -23,6 +23,8 @@ const imagePasteTargetEl = document.getElementById("image-paste-target");
 const imageNoteImgEl = document.getElementById("image-note-img");
 const imageNoteCloseEl = document.getElementById("image-note-close");
 const imageNoteShowEl = document.getElementById("image-note-show");
+const imageNoteUploadTriggerEl = document.getElementById("image-note-upload-trigger");
+const imageNotePasteTriggerEl = document.getElementById("image-note-paste-trigger");
 
 let knownNoteTimerStarted = false;
 
@@ -506,9 +508,19 @@ if (imageNoteWrapEl) {
       imagePasteTargetEl?.focus();
     }
   });
+}
 
-  imageNoteWrapEl.addEventListener("click", () => {
+if (imageNoteUploadTriggerEl) {
+  imageNoteUploadTriggerEl.addEventListener("click", () => {
     imageUploadEl?.click();
+  });
+}
+
+if (imageNotePasteTriggerEl) {
+  imageNotePasteTriggerEl.addEventListener("pointerdown", () => {
+    if (!passiveImageDataUrl) {
+      imagePasteTargetEl?.focus();
+    }
   });
 }
 
