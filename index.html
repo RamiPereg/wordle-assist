@@ -127,6 +127,21 @@
       position: relative;
     }
 
+    .toggle-row {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: #111;
+    }
+
     #pool-fake-placeholder {
       position: absolute;
       inset-inline-start: 14px;
@@ -319,8 +334,13 @@
           <div id="pool-fake-placeholder">
             אותיות שמיקומן לא ידוע (<span class="yellow">צהובות</span>)
           </div>
-          <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="5" />
+          <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="4" />
         </div>
+
+        <label class="toggle-row" for="duplicate-toggle">
+          <input type="checkbox" id="duplicate-toggle" />
+          תכפיל אותיות
+        </label>
 
         <div class="selected-letters" id="selected-letters">
           <div class="selected-grid" id="selected-grid"></div>
