@@ -11,6 +11,7 @@ const MAX_YELLOW = 4;
 const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
 const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
+const duplicateToggleEl = document.getElementById("duplicate-toggle");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
@@ -140,6 +141,15 @@ function countChars(str) {
   return m;
 }
 
+function countCharsArray(arr) {
+  const m = new Map();
+  for (const ch of arr) {
+    if (!ch) continue;
+    m.set(ch, (m.get(ch) || 0) + 1);
+  }
+  return m;
+}
+
 function combinations(positions, k) {
   const out = [];
   const n = positions.length;
@@ -175,6 +185,28 @@ function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
       backtrack(posIdx + 1);
       baseArr5[slotIndex] = "";
       multisetCounts.set(ch, remaining);
+    }
+  }
+  backtrack(0);
+  return results;
+}
+
+function generateDuplicateFillings(baseArr5, emptyPositions, alphabet, counts, maxPerLetter) {
+  const results = [];
+  function backtrack(posIdx) {
+    if (posIdx === emptyPositions.length) {
+      results.push(baseArr5.slice());
+      return;
+    }
+    const slotIndex = emptyPositions[posIdx];
+    for (const ch of alphabet) {
+      const current = counts.get(ch) || 0;
+      if (current >= maxPerLetter) continue;
+      counts.set(ch, current + 1);
+      baseArr5[slotIndex] = ch;
+      backtrack(posIdx + 1);
+      baseArr5[slotIndex] = "";
+      counts.set(ch, current);
     }
   }
   backtrack(0);
@@ -581,13 +613,8 @@ function recompute() {
   resultsEl.innerHTML = "";
   closeMenu();
 
+  const duplicateMode = !!duplicateToggleEl?.checked;
   const k = pool.length;
-
-  if (k === 0) {
-    const line = renderPattern(base.slice());
-    if (line) resultsEl.appendChild(line);
-    return;
-  }
 
   if (k > freePositions.length) {
     setWarning(`הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`);
@@ -595,22 +622,112 @@ function recompute() {
   }
 
   const chosenSets = combinations(freePositions, k);
-  const uniq = new Set();
-  const frag = document.createDocumentFragment();
+  const basePlacements = [];
 
   for (const chosen of chosenSets) {
     const baseCopy = base.slice();
     const ms = new Map(poolCounts);
     const placements = generatePlacements(baseCopy, chosen, ms);
-    for (const arr of placements) {
+    basePlacements.push(...placements);
+  }
+
+  const freeRemaining = freePositions.length - k;
+  const renderBasePlacements = () => {
+    const uniq = new Set();
+    const frag = document.createDocumentFragment();
+    for (const arr of basePlacements) {
       const key = makeKey(arr);
       if (uniq.has(key)) continue;
       uniq.add(key);
       const line = renderPattern(arr);
       if (line) frag.appendChild(line);
     }
+    resultsEl.appendChild(frag);
+  };
+
+  if (!duplicateMode || freeRemaining <= 0) {
+    renderBasePlacements();
+    return;
   }
 
+  const duplicateAlphabetSet = new Set();
+  for (const slot of slots) {
+    if (slot.fixedChar) duplicateAlphabetSet.add(slot.fixedChar);
+  }
+  for (const ch of pool) duplicateAlphabetSet.add(ch);
+  const duplicateAlphabet = [...duplicateAlphabetSet].sort((a, b) => a.localeCompare(b));
+
+  if (duplicateAlphabet.length === 0) {
+    renderBasePlacements();
+    return;
+  }
+
+  const greenSet = new Set(slots.filter((slot) => slot.fixedChar).map((slot) => slot.fixedChar));
+  const fullCandidates = [];
+  const uniqFull = new Set();
+
+  for (const baseArr of basePlacements) {
+    const emptyPositions = [];
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      if (!baseArr[i]) emptyPositions.push(i);
+    }
+    if (emptyPositions.length === 0) {
+      const key = makeKey(baseArr);
+      if (uniqFull.has(key)) continue;
+      uniqFull.add(key);
+      const score = baseArr.reduce((acc, ch, idx) => {
+        if (!fixedPositions.has(idx) && greenSet.has(ch)) return acc + 1;
+        return acc;
+      }, 0);
+      fullCandidates.push({ arr: baseArr.slice(), key, score });
+      continue;
+    }
+
+    const counts = countCharsArray(baseArr);
+    let invalid = false;
+    for (const count of counts.values()) {
+      if (count > 2) {
+        invalid = true;
+        break;
+      }
+    }
+    if (invalid) continue;
+
+    const filled = generateDuplicateFillings(
+      baseArr.slice(),
+      emptyPositions,
+      duplicateAlphabet,
+      counts,
+      2
+    );
+
+    for (const arr of filled) {
+      const key = makeKey(arr);
+      if (uniqFull.has(key)) continue;
+      uniqFull.add(key);
+      const score = arr.reduce((acc, ch, idx) => {
+        if (!fixedPositions.has(idx) && greenSet.has(ch)) return acc + 1;
+        return acc;
+      }, 0);
+      fullCandidates.push({ arr, key, score });
+    }
+  }
+
+  if (fullCandidates.length === 0) {
+    renderBasePlacements();
+    return;
+  }
+
+  fullCandidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.key.localeCompare(b.key);
+  });
+
+  const frag = document.createDocumentFragment();
+  for (const candidate of fullCandidates) {
+    const line = renderPattern(candidate.arr);
+    if (line) frag.appendChild(line);
+  }
   resultsEl.appendChild(frag);
 }
 
@@ -624,6 +741,10 @@ poolEl.addEventListener("input", () => {
   const normalized = sanitizePool(poolEl.value, maxLen);
   if (poolEl.value !== normalized) poolEl.value = normalized;
   syncPoolPlaceholder();
+  recompute();
+});
+
+duplicateToggleEl?.addEventListener("change", () => {
   recompute();
 });
 
