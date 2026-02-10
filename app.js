@@ -40,6 +40,7 @@ let imageContainerHidden = false;
   const css = `
   .pattern-line { position: relative; user-select: none; -webkit-user-select: none; }
   .pattern-line.swipe-anim { transition: transform 0.18s ease; }
+  .cell { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .wa-menu {
     position: fixed;
     z-index: 9999;
@@ -350,6 +351,7 @@ function attachSwipeToLine(lineEl, patternKey) {
   let dy = 0;
   let startTime = 0;
   let tracking = false;
+  let hasCapture = false;
 
   lineEl.style.touchAction = "pan-y";
 
@@ -367,12 +369,12 @@ function attachSwipeToLine(lineEl, patternKey) {
   lineEl.addEventListener("pointerdown", (e) => {
     closeMenu();
     tracking = true;
+    hasCapture = false;
     startX = e.clientX;
     startY = e.clientY;
     dx = 0;
     dy = 0;
     startTime = Date.now();
-    lineEl.setPointerCapture(e.pointerId);
     lineEl.classList.remove("swipe-anim");
   });
 
@@ -385,6 +387,10 @@ function attachSwipeToLine(lineEl, patternKey) {
       return;
     }
     if (dx < 0) {
+      if (!hasCapture && Math.abs(dx) > 12) {
+        lineEl.setPointerCapture(e.pointerId);
+        hasCapture = true;
+      }
       lineEl.style.transform = `translateX(${dx}px)`;
       lineEl.style.background = "#ffe3e3";
     } else {
@@ -392,9 +398,13 @@ function attachSwipeToLine(lineEl, patternKey) {
     }
   });
 
-  lineEl.addEventListener("pointerup", () => {
+  lineEl.addEventListener("pointerup", (e) => {
     if (!tracking) return;
     tracking = false;
+    if (hasCapture && lineEl.hasPointerCapture(e.pointerId)) {
+      lineEl.releasePointerCapture(e.pointerId);
+    }
+    hasCapture = false;
     const dt = Date.now() - startTime;
     const farEnough = dx < -lineEl.offsetWidth * 0.35;
     const fastFlick = dt < 220 && dx < -45;
@@ -408,6 +418,7 @@ function attachSwipeToLine(lineEl, patternKey) {
 
   lineEl.addEventListener("pointercancel", () => {
     tracking = false;
+    hasCapture = false;
     resetPosition(true);
   });
 }
@@ -458,11 +469,15 @@ function renderPattern(arr5) {
       span.addEventListener("pointermove", (e) => {
         const mx = Math.abs(e.clientX - downX);
         const my = Math.abs(e.clientY - downY);
-        if (mx > 10 || my > 10) {
+        if (mx > 14 || my > 14) {
           canceled = true;
           if (timer) clearTimeout(timer);
           timer = null;
         }
+      });
+
+      span.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
       });
 
       ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => {
