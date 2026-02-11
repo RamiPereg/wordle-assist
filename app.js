@@ -651,17 +651,14 @@ function recompute() {
     basePlacements.push(...placements);
   }
 
-  const uniq = new Set();
-  const frag = document.createDocumentFragment();
+  const baseKeys = new Set();
   const orderedBasePlacements = [];
 
   for (const arr of basePlacements) {
     const key = makeKey(arr);
-    if (uniq.has(key)) continue;
-    uniq.add(key);
+    if (baseKeys.has(key)) continue;
+    baseKeys.add(key);
     orderedBasePlacements.push(arr.slice());
-    const line = renderPattern(arr);
-    if (line) frag.appendChild(line);
   }
 
   const completionAlphabetSet = new Set();
@@ -675,17 +672,31 @@ function recompute() {
   }
   const completionAlphabet = [...completionAlphabetSet];
 
+  const completionPlacements = [];
+  const completionKeys = new Set(baseKeys);
+
   if (completionAlphabet.length > 0) {
     for (const baseArr of orderedBasePlacements) {
       const variants = generateCompletionVariants(baseArr.slice(), completionAlphabet, 2);
       for (const arr of variants) {
         const key = makeKey(arr);
-        if (uniq.has(key)) continue;
-        uniq.add(key);
-        const line = renderPattern(arr);
-        if (line) frag.appendChild(line);
+        if (completionKeys.has(key)) continue;
+        completionKeys.add(key);
+        completionPlacements.push(arr.slice());
       }
     }
+  }
+
+  const frag = document.createDocumentFragment();
+
+  for (const arr of completionPlacements) {
+    const line = renderPattern(arr);
+    if (line) frag.appendChild(line);
+  }
+
+  for (const arr of orderedBasePlacements) {
+    const line = renderPattern(arr);
+    if (line) frag.appendChild(line);
   }
 
   resultsEl.appendChild(frag);
