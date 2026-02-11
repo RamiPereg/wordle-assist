@@ -127,8 +127,16 @@
       position: relative;
     }
 
-    .toggle-row {
+    .toggles-row {
       margin-top: 10px;
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 18px;
+    }
+
+    .toggle-row {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -337,10 +345,17 @@
           <input id="pool" type="text" inputmode="text" autocomplete="off" maxlength="4" />
         </div>
 
-        <label class="toggle-row" for="duplicate-toggle">
-          <input type="checkbox" id="duplicate-toggle" />
-          תכפיל אותיות ירוקות
-        </label>
+        <div class="toggles-row">
+          <label class="toggle-row" for="duplicate-toggle">
+            <input type="checkbox" id="duplicate-toggle" />
+            תכפיל ירוקות
+          </label>
+
+          <label class="toggle-row" for="yellow-duplicate-toggle">
+            <input type="checkbox" id="yellow-duplicate-toggle" />
+            תכפיל צהובות
+          </label>
+        </div>
 
         <div class="selected-letters" id="selected-letters">
           <div class="selected-grid" id="selected-grid"></div>
@@ -372,4 +387,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
