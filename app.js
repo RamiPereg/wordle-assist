@@ -12,6 +12,7 @@ const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
 const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const duplicateToggleEl = document.getElementById("duplicate-toggle");
+const yellowDuplicateToggleEl = document.getElementById("yellow-duplicate-toggle");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
@@ -40,7 +41,6 @@ let imageContainerHidden = false;
   const css = `
   .pattern-line { position: relative; user-select: none; -webkit-user-select: none; }
   .pattern-line.swipe-anim { transition: transform 0.18s ease; }
-  .cell { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .wa-menu {
     position: fixed;
     z-index: 9999;
@@ -192,25 +192,39 @@ function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   return results;
 }
 
-function generateDuplicateFillings(baseArr5, emptyPositions, alphabet, counts, maxPerLetter) {
+function generateCompletionVariants(baseArr5, completionAlphabet, maxAddedPerLetter) {
+  const emptyPositions = [];
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    if (!baseArr5[i]) emptyPositions.push(i);
+  }
+
+  if (emptyPositions.length === 0 || completionAlphabet.length === 0) return [];
+
   const results = [];
-  function backtrack(posIdx) {
+  const addedCounts = new Map();
+
+  function backtrack(posIdx, addedAny) {
     if (posIdx === emptyPositions.length) {
-      results.push(baseArr5.slice());
+      if (addedAny) results.push(baseArr5.slice());
       return;
     }
+
     const slotIndex = emptyPositions[posIdx];
-    for (const ch of alphabet) {
-      const current = counts.get(ch) || 0;
-      if (current >= maxPerLetter) continue;
-      counts.set(ch, current + 1);
+
+    backtrack(posIdx + 1, addedAny);
+
+    for (const ch of completionAlphabet) {
+      const current = addedCounts.get(ch) || 0;
+      if (current >= maxAddedPerLetter) continue;
+      addedCounts.set(ch, current + 1);
       baseArr5[slotIndex] = ch;
-      backtrack(posIdx + 1);
+      backtrack(posIdx + 1, true);
       baseArr5[slotIndex] = "";
-      counts.set(ch, current);
+      addedCounts.set(ch, current);
     }
   }
-  backtrack(0);
+
+  backtrack(0, false);
   return results;
 }
 
@@ -351,7 +365,6 @@ function attachSwipeToLine(lineEl, patternKey) {
   let dy = 0;
   let startTime = 0;
   let tracking = false;
-  let hasCapture = false;
 
   lineEl.style.touchAction = "pan-y";
 
@@ -369,12 +382,12 @@ function attachSwipeToLine(lineEl, patternKey) {
   lineEl.addEventListener("pointerdown", (e) => {
     closeMenu();
     tracking = true;
-    hasCapture = false;
     startX = e.clientX;
     startY = e.clientY;
     dx = 0;
     dy = 0;
     startTime = Date.now();
+    lineEl.setPointerCapture(e.pointerId);
     lineEl.classList.remove("swipe-anim");
   });
 
@@ -387,10 +400,6 @@ function attachSwipeToLine(lineEl, patternKey) {
       return;
     }
     if (dx < 0) {
-      if (!hasCapture && Math.abs(dx) > 12) {
-        lineEl.setPointerCapture(e.pointerId);
-        hasCapture = true;
-      }
       lineEl.style.transform = `translateX(${dx}px)`;
       lineEl.style.background = "#ffe3e3";
     } else {
@@ -398,13 +407,9 @@ function attachSwipeToLine(lineEl, patternKey) {
     }
   });
 
-  lineEl.addEventListener("pointerup", (e) => {
+  lineEl.addEventListener("pointerup", () => {
     if (!tracking) return;
     tracking = false;
-    if (hasCapture && lineEl.hasPointerCapture(e.pointerId)) {
-      lineEl.releasePointerCapture(e.pointerId);
-    }
-    hasCapture = false;
     const dt = Date.now() - startTime;
     const farEnough = dx < -lineEl.offsetWidth * 0.35;
     const fastFlick = dt < 220 && dx < -45;
@@ -418,7 +423,6 @@ function attachSwipeToLine(lineEl, patternKey) {
 
   lineEl.addEventListener("pointercancel", () => {
     tracking = false;
-    hasCapture = false;
     resetPosition(true);
   });
 }
@@ -449,12 +453,14 @@ function renderPattern(arr5) {
       let timer = null;
       let downX = 0;
       let downY = 0;
+      let downAt = 0;
       let canceled = false;
 
       span.addEventListener("pointerdown", (e) => {
         canceled = false;
         downX = e.clientX;
         downY = e.clientY;
+        downAt = Date.now();
         timer = setTimeout(() => {
           if (canceled) return;
           const letter = arr5[i];
@@ -467,17 +473,15 @@ function renderPattern(arr5) {
       });
 
       span.addEventListener("pointermove", (e) => {
+        const elapsed = Date.now() - downAt;
         const mx = Math.abs(e.clientX - downX);
         const my = Math.abs(e.clientY - downY);
-        if (mx > 14 || my > 14) {
+        const threshold = elapsed < 350 ? 16 : 10;
+        if (mx > threshold || my > threshold) {
           canceled = true;
           if (timer) clearTimeout(timer);
           timer = null;
         }
-      });
-
-      span.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
       });
 
       ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => {
@@ -628,7 +632,8 @@ function recompute() {
   resultsEl.innerHTML = "";
   closeMenu();
 
-  const duplicateMode = !!duplicateToggleEl?.checked;
+  const greenDupEnabled = !!duplicateToggleEl?.checked;
+  const yellowDupEnabled = !!yellowDuplicateToggleEl?.checked;
   const k = pool.length;
 
   if (k > freePositions.length) {
@@ -646,103 +651,43 @@ function recompute() {
     basePlacements.push(...placements);
   }
 
-  const freeRemaining = freePositions.length - k;
-  const renderBasePlacements = () => {
-    const uniq = new Set();
-    const frag = document.createDocumentFragment();
-    for (const arr of basePlacements) {
-      const key = makeKey(arr);
-      if (uniq.has(key)) continue;
-      uniq.add(key);
-      const line = renderPattern(arr);
-      if (line) frag.appendChild(line);
-    }
-    resultsEl.appendChild(frag);
-  };
-
-  if (!duplicateMode || freeRemaining <= 0) {
-    renderBasePlacements();
-    return;
-  }
-
-  const duplicateAlphabetSet = new Set();
-  for (const slot of slots) {
-    if (slot.fixedChar) duplicateAlphabetSet.add(slot.fixedChar);
-  }
-  for (const ch of pool) duplicateAlphabetSet.add(ch);
-  const duplicateAlphabet = [...duplicateAlphabetSet].sort((a, b) => a.localeCompare(b));
-
-  if (duplicateAlphabet.length === 0) {
-    renderBasePlacements();
-    return;
-  }
-
-  const greenSet = new Set(slots.filter((slot) => slot.fixedChar).map((slot) => slot.fixedChar));
-  const fullCandidates = [];
-  const uniqFull = new Set();
-
-  for (const baseArr of basePlacements) {
-    const emptyPositions = [];
-    for (let i = 0; i < SLOT_COUNT; i++) {
-      if (!baseArr[i]) emptyPositions.push(i);
-    }
-    if (emptyPositions.length === 0) {
-      const key = makeKey(baseArr);
-      if (uniqFull.has(key)) continue;
-      uniqFull.add(key);
-      const score = baseArr.reduce((acc, ch, idx) => {
-        if (!fixedPositions.has(idx) && greenSet.has(ch)) return acc + 1;
-        return acc;
-      }, 0);
-      fullCandidates.push({ arr: baseArr.slice(), key, score });
-      continue;
-    }
-
-    const counts = countCharsArray(baseArr);
-    let invalid = false;
-    for (const count of counts.values()) {
-      if (count > 2) {
-        invalid = true;
-        break;
-      }
-    }
-    if (invalid) continue;
-
-    const filled = generateDuplicateFillings(
-      baseArr.slice(),
-      emptyPositions,
-      duplicateAlphabet,
-      counts,
-      2
-    );
-
-    for (const arr of filled) {
-      const key = makeKey(arr);
-      if (uniqFull.has(key)) continue;
-      uniqFull.add(key);
-      const score = arr.reduce((acc, ch, idx) => {
-        if (!fixedPositions.has(idx) && greenSet.has(ch)) return acc + 1;
-        return acc;
-      }, 0);
-      fullCandidates.push({ arr, key, score });
-    }
-  }
-
-  if (fullCandidates.length === 0) {
-    renderBasePlacements();
-    return;
-  }
-
-  fullCandidates.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.key.localeCompare(b.key);
-  });
-
+  const uniq = new Set();
   const frag = document.createDocumentFragment();
-  for (const candidate of fullCandidates) {
-    const line = renderPattern(candidate.arr);
+  const orderedBasePlacements = [];
+
+  for (const arr of basePlacements) {
+    const key = makeKey(arr);
+    if (uniq.has(key)) continue;
+    uniq.add(key);
+    orderedBasePlacements.push(arr.slice());
+    const line = renderPattern(arr);
     if (line) frag.appendChild(line);
   }
+
+  const completionAlphabetSet = new Set();
+  if (greenDupEnabled) {
+    for (const slot of slots) {
+      if (slot.fixedChar) completionAlphabetSet.add(slot.fixedChar);
+    }
+  }
+  if (yellowDupEnabled) {
+    for (const ch of pool) completionAlphabetSet.add(ch);
+  }
+  const completionAlphabet = [...completionAlphabetSet];
+
+  if (completionAlphabet.length > 0) {
+    for (const baseArr of orderedBasePlacements) {
+      const variants = generateCompletionVariants(baseArr.slice(), completionAlphabet, 2);
+      for (const arr of variants) {
+        const key = makeKey(arr);
+        if (uniq.has(key)) continue;
+        uniq.add(key);
+        const line = renderPattern(arr);
+        if (line) frag.appendChild(line);
+      }
+    }
+  }
+
   resultsEl.appendChild(frag);
 }
 
@@ -760,6 +705,10 @@ poolEl.addEventListener("input", () => {
 });
 
 duplicateToggleEl?.addEventListener("change", () => {
+  recompute();
+});
+
+yellowDuplicateToggleEl?.addEventListener("change", () => {
   recompute();
 });
 
