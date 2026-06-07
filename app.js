@@ -784,4 +784,3 @@ yellowDuplicateToggleEl?.addEventListener("change", () => {
 });
 
 recompute();
-```
