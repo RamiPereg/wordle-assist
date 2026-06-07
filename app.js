@@ -441,6 +441,15 @@ function renderPattern(arr5) {
   const line = document.createElement("div");
   line.className = "pattern-line";
 
+  function openBanMenuForCell(cellIndex, clientX, clientY) {
+    const letter = arr5[cellIndex];
+    const visualIndex = visualIndexFromLogical(cellIndex);
+    openMenuAt(clientX, clientY, () => {
+      bannedPositions.add(`${letter}|${visualIndex}`);
+      recompute();
+    });
+  }
+
   for (let i = 0; i < SLOT_COUNT; i++) {
     const span = document.createElement("span");
     span.className = "cell" + (arr5[i] ? "" : " blank");
@@ -455,24 +464,29 @@ function renderPattern(arr5) {
       let downY = 0;
       let downAt = 0;
       let canceled = false;
+      let longPressTriggered = false;
+      let lastPointerType = "";
 
       span.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
         canceled = false;
+        longPressTriggered = false;
+        lastPointerType = e.pointerType || "";
         downX = e.clientX;
         downY = e.clientY;
         downAt = Date.now();
+        if (lastPointerType === "mouse") return;
+
+        if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
           if (canceled) return;
-          const letter = arr5[i];
-          const visualIndex = visualIndexFromLogical(i);
-          openMenuAt(e.clientX, e.clientY, () => {
-            bannedPositions.add(`${letter}|${visualIndex}`);
-            recompute();
-          });
+          longPressTriggered = true;
+          openBanMenuForCell(i, e.clientX, e.clientY);
         }, 450);
       });
 
       span.addEventListener("pointermove", (e) => {
+        e.stopPropagation();
         const elapsed = Date.now() - downAt;
         const mx = Math.abs(e.clientX - downX);
         const my = Math.abs(e.clientY - downY);
@@ -484,11 +498,24 @@ function renderPattern(arr5) {
         }
       });
 
-      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => {
+      span.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (lastPointerType !== "mouse") return;
+        openBanMenuForCell(i, e.clientX, e.clientY);
+      });
+
+      ["pointerup", "pointercancel"].forEach((ev) => {
         span.addEventListener(ev, () => {
           if (timer) clearTimeout(timer);
           timer = null;
+          if (ev === "pointerup" && longPressTriggered) {
+            longPressTriggered = false;
+          }
         });
+      });
+
+      span.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
       });
     }
 
@@ -724,3 +751,4 @@ yellowDuplicateToggleEl?.addEventListener("change", () => {
 });
 
 recompute();
+```
