@@ -6,7 +6,7 @@ if ("serviceWorker" in navigator) {
 }
 
 const SLOT_COUNT = 5;
-const MAX_YELLOW = 4;
+const MAX_YELLOW = 5;
 
 const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
@@ -41,6 +41,14 @@ let imageContainerHidden = false;
   const css = `
   .pattern-line { position: relative; user-select: none; -webkit-user-select: none; }
   .pattern-line.swipe-anim { transition: transform 0.18s ease; }
+  #pool.limit-hit { animation: pool-limit-shake 0.24s ease; }
+  @keyframes pool-limit-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(5px); }
+  }
   .wa-menu {
     position: fixed;
     z-index: 9999;
@@ -104,19 +112,38 @@ function normalizeHebrewLetter(value) {
 }
 
 function getMaxPoolLen() {
-  const fixedCount = slots.filter((slot) => slot.fixedChar).length;
-  return Math.max(0, SLOT_COUNT - fixedCount);
+  return MAX_YELLOW;
 }
 
-function sanitizePool(s, maxLen) {
-  const lim = typeof maxLen === "number" ? Math.max(0, maxLen) : 5;
-  const normalized = (s || "")
+function sanitizePoolRaw(s) {
+  return (s || "")
     .replace(/\s+/g, "")
     .split("")
     .map((ch) => normalizeHebrewLetter(ch))
     .filter(Boolean)
     .join("");
-  return normalized.slice(0, lim);
+}
+
+function sanitizePool(s, maxLen) {
+  const lim = typeof maxLen === "number" ? Math.max(0, maxLen) : MAX_YELLOW;
+  return sanitizePoolRaw(s).slice(0, lim);
+}
+
+function triggerPoolLimitFeedback() {
+  if (!poolEl) return;
+  poolEl.classList.remove("limit-hit");
+  void poolEl.offsetWidth;
+  poolEl.classList.add("limit-hit");
+}
+
+function syncPoolValue({ withFeedback = false } = {}) {
+  const normalizedRaw = sanitizePoolRaw(poolEl.value);
+  const maxLen = getMaxPoolLen();
+  const normalized = sanitizePool(poolEl.value, maxLen);
+  const exceeded = normalizedRaw.length > maxLen;
+  if (poolEl.value !== normalized) poolEl.value = normalized;
+  if (withFeedback && exceeded) triggerPoolLimitFeedback();
+  return normalized;
 }
 
 function syncPoolPlaceholder() {
@@ -640,9 +667,7 @@ function recompute() {
     }
   }
 
-  const maxPoolLen = Math.min(SLOT_COUNT - fixedPositions.size, MAX_YELLOW);
-  const normalizedManual = sanitizePool(poolEl.value, maxPoolLen);
-  if (poolEl.value !== normalizedManual) poolEl.value = normalizedManual;
+  const normalizedManual = syncPoolValue();
 
   renderSelectedChips();
   syncPoolPlaceholder();
@@ -662,20 +687,30 @@ function recompute() {
   const greenDupEnabled = !!duplicateToggleEl?.checked;
   const yellowDupEnabled = !!yellowDuplicateToggleEl?.checked;
   const k = pool.length;
-
-  if (k > freePositions.length) {
-    setWarning(`הזנת ${k} אותיות ידועות, אבל יש רק ${freePositions.length} מקומות פנויים בתבנית.`);
-    return;
-  }
-
-  const chosenSets = combinations(freePositions, k);
   const basePlacements = [];
 
-  for (const chosen of chosenSets) {
-    const baseCopy = base.slice();
-    const ms = new Map(poolCounts);
-    const placements = generatePlacements(baseCopy, chosen, ms);
-    basePlacements.push(...placements);
+  if (freePositions.length === 0) {
+    basePlacements.push(base.slice());
+  } else if (k <= freePositions.length) {
+    const chosenSets = combinations(freePositions, k);
+
+    for (const chosen of chosenSets) {
+      const baseCopy = base.slice();
+      const ms = new Map(poolCounts);
+      const placements = generatePlacements(baseCopy, chosen, ms);
+      basePlacements.push(...placements);
+    }
+  } else {
+    const poolIndexes = Array.from({ length: k }, (_, idx) => idx);
+    const chosenPoolSets = combinations(poolIndexes, freePositions.length);
+
+    for (const chosenPool of chosenPoolSets) {
+      const selectedLetters = chosenPool.map((idx) => pool[idx]);
+      const baseCopy = base.slice();
+      const ms = countCharsArray(selectedLetters);
+      const placements = generatePlacements(baseCopy, freePositions, ms);
+      basePlacements.push(...placements);
+    }
   }
 
   const baseKeys = new Set();
@@ -735,9 +770,7 @@ syncPoolPlaceholder();
 renderPassiveImage();
 
 poolEl.addEventListener("input", () => {
-  const maxLen = Math.min(getMaxPoolLen(), MAX_YELLOW);
-  const normalized = sanitizePool(poolEl.value, maxLen);
-  if (poolEl.value !== normalized) poolEl.value = normalized;
+  syncPoolValue({ withFeedback: true });
   syncPoolPlaceholder();
   recompute();
 });
