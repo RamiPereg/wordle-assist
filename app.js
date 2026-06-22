@@ -1,12 +1,7 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-22-1";
-
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register(`./sw.js?v=${APP_VERSION}`, { updateViaCache: "none" })
-      .then((registration) => registration.update().catch(() => {}))
-      .catch(() => {});
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
   });
 }
 
@@ -224,29 +219,36 @@ function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   return results;
 }
 
-function generateCompletionVariants(baseArr5, freePositions, completionAlphabet) {
-  if (freePositions.length === 0 || completionAlphabet.length === 0) return [];
+function generateCompletionVariants(baseArr5, completionAlphabet, maxAddedPerLetter) {
+  const emptyPositions = [];
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    if (!baseArr5[i]) emptyPositions.push(i);
+  }
+
+  if (emptyPositions.length === 0 || completionAlphabet.length === 0) return [];
 
   const results = [];
+  const addedCounts = new Map();
 
-  function backtrack(posIdx, changedAny) {
-    if (posIdx === freePositions.length) {
-      if (changedAny) results.push(baseArr5.slice());
+  function backtrack(posIdx, addedAny) {
+    if (posIdx === emptyPositions.length) {
+      if (addedAny) results.push(baseArr5.slice());
       return;
     }
 
-    const slotIndex = freePositions[posIdx];
-    const original = baseArr5[slotIndex];
+    const slotIndex = emptyPositions[posIdx];
 
-    backtrack(posIdx + 1, changedAny);
+    backtrack(posIdx + 1, addedAny);
 
     for (const ch of completionAlphabet) {
-      if (ch === original) continue;
+      const current = addedCounts.get(ch) || 0;
+      if (current >= maxAddedPerLetter) continue;
+      addedCounts.set(ch, current + 1);
       baseArr5[slotIndex] = ch;
       backtrack(posIdx + 1, true);
+      baseArr5[slotIndex] = "";
+      addedCounts.set(ch, current);
     }
-
-    baseArr5[slotIndex] = original;
   }
 
   backtrack(0, false);
@@ -737,11 +739,7 @@ function recompute() {
 
   if (completionAlphabet.length > 0) {
     for (const baseArr of orderedBasePlacements) {
-      const variants = generateCompletionVariants(
-        baseArr.slice(),
-        freePositions,
-        completionAlphabet
-      );
+      const variants = generateCompletionVariants(baseArr.slice(), completionAlphabet, 2);
       for (const arr of variants) {
         const key = makeKey(arr);
         if (completionKeys.has(key)) continue;
@@ -786,4 +784,3 @@ yellowDuplicateToggleEl?.addEventListener("change", () => {
 });
 
 recompute();
-```
