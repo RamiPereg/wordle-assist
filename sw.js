@@ -1,4 +1,4 @@
-const CACHE_NAME = "wordle-cache-v3"; // פעם אחת לשבור את ה-cache הישן
+const CACHE_NAME = "wordle-cache-v4"; // פעם אחת לשבור את ה-cache הישן
 const ASSETS = ["./", "./index.html", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
