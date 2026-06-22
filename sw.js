@@ -1,5 +1,11 @@
-const CACHE_NAME = "wordle-cache-v4"; // פעם אחת לשבור את ה-cache הישן
-const ASSETS = ["./", "./index.html", "./app.js", "./manifest.webmanifest"];
+const APP_VERSION = "2026-06-22-1";
+const CACHE_NAME = `wordle-cache-${APP_VERSION}`; // שובר cache כדי למנוע ערבוב גרסאות
+const ASSETS = [
+  "./",
+  "./index.html",
+  `./app.js?v=${APP_VERSION}`,
+  `./manifest.webmanifest?v=${APP_VERSION}`,
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
