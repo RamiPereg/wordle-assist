@@ -1,7 +1,12 @@
 /* PWA registration */
+const APP_VERSION = "2026-06-22-1";
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register(`./sw.js?v=${APP_VERSION}`, { updateViaCache: "none" })
+      .then((registration) => registration.update().catch(() => {}))
+      .catch(() => {});
   });
 }
 
