@@ -143,12 +143,24 @@
       gap: 8px;
       font-size: 14px;
       color: #333;
+      white-space: nowrap;
     }
 
     .toggle-row input[type="checkbox"] {
       width: 18px;
       height: 18px;
       accent-color: #111;
+    }
+
+    .toggle-count {
+      margin-inline-start: auto;
+      font-size: 14px;
+      line-height: 24px;
+      color: #333;
+      white-space: nowrap;
+      direction: ltr;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
     }
 
     #pool-fake-placeholder {
@@ -362,6 +374,8 @@
             <input type="checkbox" id="yellow-duplicate-toggle" />
             תכפיל צהובות
           </label>
+
+          <span class="toggle-count" id="visible-count"></span>
         </div>
 
         <div class="selected-letters" id="selected-letters">
@@ -394,3 +408,4 @@
  <script src="app.js?v=2026-06-22-1"></script>
 </body>
 </html>
+```
