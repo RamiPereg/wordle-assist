@@ -1,4 +1,3 @@
-```javascript
 /* PWA registration */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
