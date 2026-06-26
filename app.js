@@ -1,3 +1,4 @@
+```javascript
 /* PWA registration */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -13,6 +14,7 @@ const poolEl = document.getElementById("pool");
 const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const duplicateToggleEl = document.getElementById("duplicate-toggle");
 const yellowDuplicateToggleEl = document.getElementById("yellow-duplicate-toggle");
+const visibleCountEl = document.getElementById("visible-count");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
@@ -161,6 +163,16 @@ function renderSelectedChips() {
     chip.textContent = letter;
     selectedGridEl.appendChild(chip);
   });
+}
+
+function formatVisibleCount(count) {
+  if (count < 1000) return String(count);
+  return `${(Math.floor(count / 100) / 10).toFixed(1).replace(/\.0$/, "")}K`;
+}
+
+function setVisibleCount(count) {
+  if (!visibleCountEl) return;
+  visibleCountEl.textContent = count > 0 ? formatVisibleCount(count) : "";
 }
 
 function countChars(str) {
@@ -747,18 +759,24 @@ function recompute() {
   }
 
   const frag = document.createDocumentFragment();
+  let visiblePatternCount = 0;
 
   for (const arr of completionPlacements) {
     const line = renderPattern(arr);
-    if (line) frag.appendChild(line);
+    if (!line) continue;
+    if (arr.some(Boolean)) visiblePatternCount++;
+    frag.appendChild(line);
   }
 
   for (const arr of orderedBasePlacements) {
     const line = renderPattern(arr);
-    if (line) frag.appendChild(line);
+    if (!line) continue;
+    if (arr.some(Boolean)) visiblePatternCount++;
+    frag.appendChild(line);
   }
 
   resultsEl.appendChild(frag);
+  setVisibleCount(visiblePatternCount);
 }
 
 buildSlotsUI();
@@ -781,3 +799,4 @@ yellowDuplicateToggleEl?.addEventListener("change", () => {
 });
 
 recompute();
+```
