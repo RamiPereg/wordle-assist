@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-26-1";
+const APP_VERSION = "2026-06-26-3";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -18,6 +18,7 @@ const poolEl = document.getElementById("pool");
 const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
 const duplicateToggleEl = document.getElementById("duplicate-toggle");
 const yellowDuplicateToggleEl = document.getElementById("yellow-duplicate-toggle");
+const shortToggleEl = document.getElementById("short-toggle");
 const visibleCountEl = document.getElementById("visible-count");
 const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
@@ -33,6 +34,7 @@ const imageNoteCloseEl = document.getElementById("image-note-close");
 const imageNoteShowEl = document.getElementById("image-note-show");
 
 let knownNoteTimerStarted = false;
+let knownWordsSet = null;
 
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
 
@@ -177,6 +179,36 @@ function formatVisibleCount(count) {
 function setVisibleCount(count) {
   if (!visibleCountEl) return;
   visibleCountEl.textContent = count > 0 ? formatVisibleCount(count) : "";
+}
+
+function normalizePatternWord(arr5) {
+  if (!Array.isArray(arr5) || arr5.length !== SLOT_COUNT) return "";
+  let word = "";
+  for (const ch of arr5) {
+    const normalized = normalizeHebrewLetter(ch);
+    if (!normalized) return "";
+    word += normalized;
+  }
+  return word;
+}
+
+function hasKnownWordsSource() {
+  return typeof window.WA_KNOWN_WORDS_TEXT === "string" && window.WA_KNOWN_WORDS_TEXT.length > 0;
+}
+
+function getKnownWordsSet() {
+  if (knownWordsSet) return knownWordsSet;
+  if (!hasKnownWordsSource()) return null;
+  knownWordsSet = new Set(window.WA_KNOWN_WORDS_TEXT.split(" ").filter(Boolean));
+  return knownWordsSet;
+}
+
+function syncShortToggleAvailability() {
+  if (!shortToggleEl) return;
+  const available = hasKnownWordsSource();
+  shortToggleEl.disabled = !available;
+  if (!available) shortToggleEl.checked = false;
+  shortToggleEl.parentElement?.classList.toggle("disabled", !available);
 }
 
 function countChars(str) {
@@ -467,16 +499,23 @@ function attachSwipeToLine(lineEl, patternKey) {
   });
 }
 
-function renderPattern(arr5) {
+function isPatternVisible(arr5) {
   const patternKey = makeKey(arr5);
-  if (hiddenPatterns.has(patternKey)) return null;
+  if (hiddenPatterns.has(patternKey)) return false;
 
   for (let logicalIndex = 0; logicalIndex < SLOT_COUNT; logicalIndex++) {
     const ch = arr5[logicalIndex];
     if (!ch) continue;
     const vIdx = visualIndexFromLogical(logicalIndex);
-    if (bannedPositions.has(`${ch}|${vIdx}`)) return null;
+    if (bannedPositions.has(`${ch}|${vIdx}`)) return false;
   }
+
+  return true;
+}
+
+function renderPattern(arr5) {
+  const patternKey = makeKey(arr5);
+  if (!isPatternVisible(arr5)) return null;
 
   const line = document.createElement("div");
   line.className = "pattern-line";
@@ -564,6 +603,62 @@ function renderPattern(arr5) {
 
   attachSwipeToLine(line, patternKey);
   return line;
+}
+
+function getVisibleRenderEntries(orderedPlacements, shortModeEnabled) {
+  const visibleEntries = [];
+
+  if (!shortModeEnabled) {
+    for (const arr of orderedPlacements) {
+      if (!isPatternVisible(arr)) continue;
+      visibleEntries.push({ arr, key: makeKey(arr) });
+    }
+    return visibleEntries;
+  }
+
+  const knownWords = getKnownWordsSet();
+  if (!knownWords || knownWords.size === 0) {
+    for (const arr of orderedPlacements) {
+      if (!isPatternVisible(arr)) continue;
+      visibleEntries.push({ arr, key: makeKey(arr) });
+    }
+    return visibleEntries;
+  }
+
+  const promotedKeys = new Set();
+  const seenWords = new Set();
+
+  for (const arr of orderedPlacements) {
+    const key = makeKey(arr);
+    const visible = isPatternVisible(arr);
+    const word = normalizePatternWord(arr);
+
+    if (word && !seenWords.has(word)) {
+      seenWords.add(word);
+      if (visible && knownWords.has(word)) {
+        promotedKeys.add(key);
+      }
+    }
+
+    if (visible) {
+      visibleEntries.push({ arr, key });
+    }
+  }
+
+  if (promotedKeys.size === 0) return visibleEntries;
+
+  const promoted = [];
+  const regular = [];
+
+  for (const entry of visibleEntries) {
+    if (promotedKeys.has(entry.key)) {
+      promoted.push(entry);
+    } else {
+      regular.push(entry);
+    }
+  }
+
+  return promoted.concat(regular);
 }
 
 function renderPassiveImage() {
@@ -699,6 +794,7 @@ function recompute() {
 
   const greenDupEnabled = !!duplicateToggleEl?.checked;
   const yellowDupEnabled = !!yellowDuplicateToggleEl?.checked;
+  const shortModeEnabled = !!shortToggleEl?.checked && hasKnownWordsSource();
   const k = pool.length;
   const basePlacements = [];
 
@@ -762,20 +858,16 @@ function recompute() {
     }
   }
 
+  const orderedPlacements = completionPlacements.concat(orderedBasePlacements);
+  const visibleEntries = getVisibleRenderEntries(orderedPlacements, shortModeEnabled);
+
   const frag = document.createDocumentFragment();
   let visiblePatternCount = 0;
 
-  for (const arr of completionPlacements) {
-    const line = renderPattern(arr);
+  for (const entry of visibleEntries) {
+    const line = renderPattern(entry.arr);
     if (!line) continue;
-    if (arr.some(Boolean)) visiblePatternCount++;
-    frag.appendChild(line);
-  }
-
-  for (const arr of orderedBasePlacements) {
-    const line = renderPattern(arr);
-    if (!line) continue;
-    if (arr.some(Boolean)) visiblePatternCount++;
+    if (entry.arr.some(Boolean)) visiblePatternCount++;
     frag.appendChild(line);
   }
 
@@ -802,4 +894,9 @@ yellowDuplicateToggleEl?.addEventListener("change", () => {
   recompute();
 });
 
+shortToggleEl?.addEventListener("change", () => {
+  recompute();
+});
+
+syncShortToggleAvailability();
 recompute();
