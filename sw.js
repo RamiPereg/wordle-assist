@@ -1,9 +1,8 @@
-const APP_VERSION = "2026-06-26-3";
+const APP_VERSION = "2026-06-26-1";
 const CACHE_NAME = `wordle-cache-${APP_VERSION}`; // שובר cache כדי למנוע ערבוב גרסאות
 const ASSETS = [
   "./",
   "./index.html",
-  `./known-words.js?v=${APP_VERSION}`,
   `./app.js?v=${APP_VERSION}`,
   `./manifest.webmanifest?v=${APP_VERSION}`,
 ];
@@ -52,7 +51,6 @@ self.addEventListener("fetch", (event) => {
   const isAppCore =
     event.request.mode === "navigate" ||
     url.pathname.endsWith("/index.html") ||
-    url.pathname.endsWith("/known-words.js") ||
     url.pathname.endsWith("/app.js") ||
     url.pathname.endsWith("/manifest.webmanifest");
 

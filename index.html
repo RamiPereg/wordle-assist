@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="wa-build" content="2026-06-26-3" />
+  <meta name="wa-build" content="2026-06-26-1" />
   <title>נו באמת</title>
 
-  <link rel="manifest" href="manifest.webmanifest?v=2026-06-26-3" />
+  <link rel="manifest" href="manifest.webmanifest?v=2026-06-26-1" />
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -150,14 +150,6 @@
       width: 18px;
       height: 18px;
       accent-color: #111;
-    }
-
-    .toggle-row.disabled {
-      color: #999;
-    }
-
-    .toggle-row input[type="checkbox"]:disabled {
-      cursor: not-allowed;
     }
 
     .toggle-count {
@@ -343,19 +335,8 @@
       display: none !important;
     }
 
-    @media (max-width: 420px) {
-      .toggles-row { gap: 8px; }
-      .toggle-row { gap: 4px; font-size: 12px; }
-      .toggle-row input[type="checkbox"] { width: 16px; height: 16px; }
-      .toggle-count { font-size: 12px; }
-    }
-
     @media (max-width: 360px) {
       :root { --tile: 50px; --gap: 8px; }
-      .toggles-row { gap: 6px; }
-      .toggle-row { gap: 3px; font-size: 11px; }
-      .toggle-row input[type="checkbox"] { width: 15px; height: 15px; }
-      .toggle-count { font-size: 11px; }
       .slot input[type="text"], .cell { font-size: 28px; }
     }
   </style>
@@ -394,11 +375,6 @@
             תכפיל צהובות
           </label>
 
-          <label class="toggle-row" for="short-toggle">
-            <input type="checkbox" id="short-toggle" />
-            קצר
-          </label>
-
           <span class="toggle-count" id="visible-count"></span>
         </div>
 
@@ -429,7 +405,6 @@
     </div>
   </div>
 
- <script src="known-words.js?v=2026-06-26-3"></script>
- <script src="app.js?v=2026-06-26-3"></script>
+ <script src="app.js?v=2026-06-26-1"></script>
 </body>
 </html>
