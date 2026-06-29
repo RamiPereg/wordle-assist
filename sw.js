@@ -1,4 +1,4 @@
-const APP_VERSION = "2026-06-26-1";
+const APP_VERSION = "2026-06-22-1";
 const CACHE_NAME = `wordle-cache-${APP_VERSION}`; // שובר cache כדי למנוע ערבוב גרסאות
 const ASSETS = [
   "./",

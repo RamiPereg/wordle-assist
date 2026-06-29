@@ -1,12 +1,7 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-26-1";
-
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register(`./sw.js?v=${APP_VERSION}`, { updateViaCache: "none" })
-      .then((registration) => registration.update().catch(() => {}))
-      .catch(() => {});
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
   });
 }
 
@@ -803,3 +798,4 @@ yellowDuplicateToggleEl?.addEventListener("change", () => {
 });
 
 recompute();
+```
