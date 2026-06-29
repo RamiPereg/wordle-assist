@@ -8,7 +8,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Get-CurrentVersion {
   $appJsPath = Join-Path $repoRoot "app.js"
-  $content = Get-Content -LiteralPath $appJsPath -Raw
+  $content = Get-Content -LiteralPath $appJsPath -Encoding utf8 -Raw
   $match = [regex]::Match($content, 'const APP_VERSION = "([^"]+)"')
   if (-not $match.Success) {
     throw "Could not find APP_VERSION in app.js"
@@ -27,7 +27,7 @@ function Get-NextVersion([string]$CurrentVersion) {
 }
 
 function Replace-InFile([string]$Path, [string]$Pattern, [string]$Replacement) {
-  $content = Get-Content -LiteralPath $Path -Raw
+  $content = Get-Content -LiteralPath $Path -Encoding utf8 -Raw
   if (-not [regex]::IsMatch($content, $Pattern)) {
     throw "Pattern not found in $Path"
   }

@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-29-2";
+const APP_VERSION = "2026-06-29-3";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -106,12 +106,12 @@ function setWarning(msg) {
 }
 
 function toFinalHebrewLetter(ch) {
-  const map = { ×›: "×š", ×ž: "×", × : "×Ÿ", ×¤: "×£", ×¦: "×¥" };
+  const map = { כ: "ך", מ: "ם", נ: "ן", פ: "ף", צ: "ץ" };
   return map[ch] || ch;
 }
 
 function toRegularHebrewLetter(ch) {
-  const map = { ×š: "×›", ×: "×ž", ×Ÿ: "× ", ×£: "×¤", ×¥: "×¦" };
+  const map = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
   return map[ch] || ch;
 }
 
@@ -119,7 +119,7 @@ function normalizeHebrewLetter(value) {
   const trimmed = (value || "").trim();
   if (!trimmed) return "";
   const candidate = toRegularHebrewLetter(trimmed[0]);
-  return /^[×-×ª]$/.test(candidate) ? candidate : "";
+  return /^[א-ת]$/.test(candidate) ? candidate : "";
 }
 
 function getMaxPoolLen() {
@@ -319,7 +319,7 @@ function buildSlotsUI() {
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = 1;
-    input.setAttribute("aria-label", `××•×ª ×§×‘×•×¢×” ×‘×ª× ${i + 1}`);
+    input.setAttribute("aria-label", `אות קבועה בתא ${i + 1}`);
     inputs[i] = input;
 
     const initialDisplayChar =
@@ -406,7 +406,7 @@ function openMenuAt(x, y, onBan) {
   menu.className = "wa-menu";
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.textContent = "×”××•×ª ×œ× ×™×›×•×œ×” ×œ×”×™×•×ª ×‘×ž×™×§×•× ×”×–×”";
+  btn.textContent = "האות לא יכולה להיות במיקום הזה";
   btn.addEventListener("click", () => {
     closeMenu();
     onBan();

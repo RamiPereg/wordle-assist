@@ -1,5 +1,5 @@
-const APP_VERSION = "2026-06-29-2";
-const CACHE_NAME = `wordle-cache-${APP_VERSION}`; // ×©×•×‘×¨ cache ×›×“×™ ×œ×ž× ×•×¢ ×¢×¨×‘×•×‘ ×’×¨×¡××•×ª
+const APP_VERSION = "2026-06-29-3";
+const CACHE_NAME = `wordle-cache-${APP_VERSION}`; // שובר cache כדי למנוע ערבוב גרסאות
 const ASSETS = [
   "./",
   "./index.html",
@@ -25,7 +25,7 @@ async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
     const fresh = await fetch(request, { cache: "no-store" });
-    // ×ž×¢×“×›× ×™× cache ×›×“×™ ×©×’× ××•×¤×œ×™×™×Ÿ ×™×¢×‘×•×“
+    // מעדכנים cache כדי שגם אופליין יעבוד
     cache.put(request, fresh.clone());
     return fresh;
   } catch (e) {
@@ -47,7 +47,7 @@ async function cacheFirst(request) {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // ×ª×ž×™×“ ×œ×”×‘×™× ×”×›×™ ×—×“×© ×¢×‘×•×¨ ×“×£ ×•××¤×œ×™×§×¦×™×”
+  // תמיד להביא הכי חדש עבור דף ואפליקציה
   const isAppCore =
     event.request.mode === "navigate" ||
     url.pathname.endsWith("/index.html") ||
