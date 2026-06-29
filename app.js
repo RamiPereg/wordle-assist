@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-29-3";
+const APP_VERSION = "2026-06-29-4";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

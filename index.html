@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="wa-build" content="2026-06-29-3" />
+  <meta name="wa-build" content="2026-06-29-4" />
   <title>נו באמת</title>
 
-  <link rel="manifest" href="manifest.webmanifest?v=2026-06-29-3" />
+  <link rel="manifest" href="manifest.webmanifest?v=2026-06-29-4" />
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -78,6 +78,7 @@
       gap: var(--gap);
       justify-content: center;
       align-items: center;
+      width: 100%;
       margin: 6px auto 12px;
     }
 
@@ -347,9 +348,15 @@
       display: none !important;
     }
 
+    @media (max-width: 390px) {
+      .wrap { padding-inline: 10px; }
+      .card { padding-inline: 12px; }
+      .cell { font-size: 28px; }
+    }
+
     @media (max-width: 360px) {
       :root { --tile: 50px; --gap: 8px; }
-      .slot input[type="text"], .cell { font-size: 28px; }
+      .slot input[type="text"] { font-size: 28px; }
     }
   </style>
 </head>
@@ -419,6 +426,6 @@
     <div class="build-version" id="build-version" aria-label="App version"></div>
   </div>
 
- <script src="app.js?v=2026-06-29-3"></script>
+ <script src="app.js?v=2026-06-29-4"></script>
 </body>
 </html>
