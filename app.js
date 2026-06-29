@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-26-4";
+const APP_VERSION = "2026-06-26-3";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -16,6 +16,8 @@ const MAX_YELLOW = 5;
 const slotsEl = document.getElementById("slots");
 const poolEl = document.getElementById("pool");
 const poolFakePlaceholder = document.getElementById("pool-fake-placeholder");
+const duplicateToggleEl = document.getElementById("duplicate-toggle");
+const yellowDuplicateToggleEl = document.getElementById("yellow-duplicate-toggle");
 const shortToggleEl = document.getElementById("short-toggle");
 const visibleCountEl = document.getElementById("visible-count");
 const resultsEl = document.getElementById("results");
@@ -790,6 +792,8 @@ function recompute() {
   resultsEl.innerHTML = "";
   closeMenu();
 
+  const greenDupEnabled = !!duplicateToggleEl?.checked;
+  const yellowDupEnabled = !!yellowDuplicateToggleEl?.checked;
   const shortModeEnabled = !!shortToggleEl?.checked && hasKnownWordsSource();
   const k = pool.length;
   const basePlacements = [];
@@ -829,10 +833,14 @@ function recompute() {
   }
 
   const completionAlphabetSet = new Set();
-  for (const slot of slots) {
-    if (slot.fixedChar) completionAlphabetSet.add(slot.fixedChar);
+  if (greenDupEnabled) {
+    for (const slot of slots) {
+      if (slot.fixedChar) completionAlphabetSet.add(slot.fixedChar);
+    }
   }
-  for (const ch of pool) completionAlphabetSet.add(ch);
+  if (yellowDupEnabled) {
+    for (const ch of pool) completionAlphabetSet.add(ch);
+  }
   const completionAlphabet = [...completionAlphabetSet];
 
   const completionPlacements = [];
@@ -875,6 +883,14 @@ renderPassiveImage();
 poolEl.addEventListener("input", () => {
   syncPoolValue({ withFeedback: true });
   syncPoolPlaceholder();
+  recompute();
+});
+
+duplicateToggleEl?.addEventListener("change", () => {
+  recompute();
+});
+
+yellowDuplicateToggleEl?.addEventListener("change", () => {
   recompute();
 });
 
