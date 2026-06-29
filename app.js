@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-26-1";
+const APP_VERSION = "2026-06-29-1";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -23,6 +23,7 @@ const resultsEl = document.getElementById("results");
 const warningEl = document.getElementById("warning");
 const knownNoteEl = document.getElementById("known-note");
 const selectedGridEl = document.getElementById("selected-grid");
+const buildVersionEl = document.getElementById("build-version");
 const imageUploadEl = document.getElementById("image-upload");
 const imageNoteWrapEl = document.getElementById("image-note-wrap");
 const imageNoteEmptyEl = document.getElementById("image-note-empty");
@@ -33,6 +34,10 @@ const imageNoteCloseEl = document.getElementById("image-note-close");
 const imageNoteShowEl = document.getElementById("image-note-show");
 
 let knownNoteTimerStarted = false;
+
+if (buildVersionEl) {
+  buildVersionEl.textContent = `v${APP_VERSION}`;
+}
 
 const slots = Array.from({ length: SLOT_COUNT }, () => ({ fixedChar: "" }));
 

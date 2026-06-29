@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="wa-build" content="2026-06-26-1" />
+  <meta name="wa-build" content="2026-06-29-1" />
   <title>נו באמת</title>
 
-  <link rel="manifest" href="manifest.webmanifest?v=2026-06-26-1" />
+  <link rel="manifest" href="manifest.webmanifest?v=2026-06-29-1" />
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -161,6 +161,18 @@
       direction: ltr;
       text-align: left;
       font-variant-numeric: tabular-nums;
+    }
+
+    .build-version {
+      width: min(100%, var(--w));
+      margin: 6px auto 0;
+      padding-inline: 2px;
+      font-size: 10px;
+      line-height: 1.4;
+      color: #999;
+      text-align: left;
+      direction: ltr;
+      user-select: text;
     }
 
     #pool-fake-placeholder {
@@ -403,8 +415,10 @@
         <div class="results" id="results"></div>
       </div>
     </div>
+
+    <div class="build-version" id="build-version" aria-label="App version"></div>
   </div>
 
- <script src="app.js?v=2026-06-26-1"></script>
+ <script src="app.js?v=2026-06-29-1"></script>
 </body>
 </html>
