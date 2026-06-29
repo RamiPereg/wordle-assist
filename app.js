@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-29-1";
+const APP_VERSION = "2026-06-29-2";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -106,12 +106,12 @@ function setWarning(msg) {
 }
 
 function toFinalHebrewLetter(ch) {
-  const map = { כ: "ך", מ: "ם", נ: "ן", פ: "ף", צ: "ץ" };
+  const map = { ×›: "×š", ×ž: "×", × : "×Ÿ", ×¤: "×£", ×¦: "×¥" };
   return map[ch] || ch;
 }
 
 function toRegularHebrewLetter(ch) {
-  const map = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
+  const map = { ×š: "×›", ×: "×ž", ×Ÿ: "× ", ×£: "×¤", ×¥: "×¦" };
   return map[ch] || ch;
 }
 
@@ -119,7 +119,7 @@ function normalizeHebrewLetter(value) {
   const trimmed = (value || "").trim();
   if (!trimmed) return "";
   const candidate = toRegularHebrewLetter(trimmed[0]);
-  return /^[א-ת]$/.test(candidate) ? candidate : "";
+  return /^[×-×ª]$/.test(candidate) ? candidate : "";
 }
 
 function getMaxPoolLen() {
@@ -199,6 +199,31 @@ function countCharsArray(arr) {
   return m;
 }
 
+function buildDuplicateCaps(pool) {
+  const greenLetters = slots.map((slot) => slot.fixedChar).filter(Boolean);
+  const yellowLetters = [...pool].filter(Boolean);
+  const manualCounts = countCharsArray([...greenLetters, ...yellowLetters]);
+  const greenSet = new Set(greenLetters);
+  const yellowSet = new Set(yellowLetters);
+  const caps = new Map();
+
+  for (const [ch, count] of manualCounts) {
+    const appearsInBoth = greenSet.has(ch) && yellowSet.has(ch);
+    caps.set(ch, appearsInBoth ? Math.max(count, 3) : Math.max(count, 2));
+  }
+
+  return caps;
+}
+
+function placementRespectsDuplicateCaps(arr5, duplicateCaps) {
+  if (!duplicateCaps || duplicateCaps.size === 0) return true;
+  const counts = countCharsArray(arr5);
+  for (const [ch, limit] of duplicateCaps) {
+    if ((counts.get(ch) || 0) > limit) return false;
+  }
+  return true;
+}
+
 function combinations(positions, k) {
   const out = [];
   const n = positions.length;
@@ -240,11 +265,11 @@ function generatePlacements(baseArr5, chosenPositions, multisetCounts) {
   return results;
 }
 
-function generateCompletionVariants(baseArr5, freePositions, completionAlphabet, maxAddedPerLetter) {
+function generateCompletionVariants(baseArr5, freePositions, completionAlphabet, duplicateCaps) {
   if (freePositions.length === 0 || completionAlphabet.length === 0) return [];
 
   const results = [];
-  const addedCounts = new Map();
+  const currentCounts = countCharsArray(baseArr5);
 
   function backtrack(posIdx, addedAny) {
     if (posIdx === freePositions.length) {
@@ -259,13 +284,15 @@ function generateCompletionVariants(baseArr5, freePositions, completionAlphabet,
 
     for (const ch of completionAlphabet) {
       if (ch === original) continue;
-      const current = addedCounts.get(ch) || 0;
-      if (current >= maxAddedPerLetter) continue;
-      addedCounts.set(ch, current + 1);
+      const limit = duplicateCaps?.get(ch) ?? Infinity;
+      const current = currentCounts.get(ch) || 0;
+      if (current >= limit) continue;
+      currentCounts.set(ch, current + 1);
       baseArr5[slotIndex] = ch;
       backtrack(posIdx + 1, true);
       baseArr5[slotIndex] = original;
-      addedCounts.set(ch, current);
+      if (current > 0) currentCounts.set(ch, current);
+      else currentCounts.delete(ch);
     }
   }
 
@@ -292,7 +319,7 @@ function buildSlotsUI() {
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = 1;
-    input.setAttribute("aria-label", `אות קבועה בתא ${i + 1}`);
+    input.setAttribute("aria-label", `××•×ª ×§×‘×•×¢×” ×‘×ª× ${i + 1}`);
     inputs[i] = input;
 
     const initialDisplayChar =
@@ -379,7 +406,7 @@ function openMenuAt(x, y, onBan) {
   menu.className = "wa-menu";
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.textContent = "האות לא יכולה להיות במיקום הזה";
+  btn.textContent = "×”××•×ª ×œ× ×™×›×•×œ×” ×œ×”×™×•×ª ×‘×ž×™×§×•× ×”×–×”";
   btn.addEventListener("click", () => {
     closeMenu();
     onBan();
@@ -692,6 +719,7 @@ function recompute() {
 
   const pool = normalizedManual;
   const poolCounts = countChars(pool);
+  const duplicateCaps = buildDuplicateCaps(pool);
 
   const freePositions = [];
   for (let i = 0; i < SLOT_COUNT; i++) {
@@ -735,6 +763,7 @@ function recompute() {
   const orderedBasePlacements = [];
 
   for (const arr of basePlacements) {
+    if (!placementRespectsDuplicateCaps(arr, duplicateCaps)) continue;
     const key = makeKey(arr);
     if (baseKeys.has(key)) continue;
     baseKeys.add(key);
@@ -757,8 +786,9 @@ function recompute() {
 
   if (completionAlphabet.length > 0) {
     for (const baseArr of orderedBasePlacements) {
-      const variants = generateCompletionVariants(baseArr.slice(), freePositions, completionAlphabet, 2);
+      const variants = generateCompletionVariants(baseArr.slice(), freePositions, completionAlphabet, duplicateCaps);
       for (const arr of variants) {
+        if (!placementRespectsDuplicateCaps(arr, duplicateCaps)) continue;
         const key = makeKey(arr);
         if (completionKeys.has(key)) continue;
         completionKeys.add(key);
