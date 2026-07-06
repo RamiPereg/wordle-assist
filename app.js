@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-06-29-4";
+const APP_VERSION = "2026-07-06-1";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -282,8 +282,10 @@ function generateCompletionVariants(baseArr5, freePositions, completionAlphabet,
 
     backtrack(posIdx + 1, addedAny);
 
+    // Never replace a letter that already came from the user's green/yellow input.
+    if (original) return;
+
     for (const ch of completionAlphabet) {
-      if (ch === original) continue;
       const limit = duplicateCaps?.get(ch) ?? Infinity;
       const current = currentCounts.get(ch) || 0;
       if (current >= limit) continue;
