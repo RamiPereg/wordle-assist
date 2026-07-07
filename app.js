@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-07-07-1";
+const APP_VERSION = "2026-07-07-2";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -32,6 +32,7 @@ const imagePasteTargetEl = document.getElementById("image-paste-target");
 const imageNoteImgEl = document.getElementById("image-note-img");
 const imageNoteCloseEl = document.getElementById("image-note-close");
 const imageNoteShowEl = document.getElementById("image-note-show");
+const imageNoteStatusEl = document.getElementById("image-note-status");
 
 let knownNoteTimerStarted = false;
 
@@ -47,6 +48,12 @@ const bannedPositions = new Set();
 let imageSelectedLettersUIOnly = [];
 let passiveImageDataUrl = "";
 let imageContainerHidden = false;
+let imageStatusMessage = "";
+let imageStatusTimer = null;
+let imageLongPressTimer = null;
+let imageLongPressStartX = 0;
+let imageLongPressStartY = 0;
+let imageSuppressClickUntil = 0;
 
 (function injectStyles() {
   const css = `
@@ -103,6 +110,58 @@ function setWarning(msg) {
   }
   warningEl.style.display = "block";
   warningEl.textContent = msg;
+}
+
+function isTextEntryTarget(target) {
+  return !!(
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+function focusImagePasteTarget() {
+  if (!imagePasteTargetEl) return;
+  try {
+    imagePasteTargetEl.focus({ preventScroll: true });
+  } catch (_) {
+    imagePasteTargetEl.focus();
+  }
+}
+
+function clearImageStatus(options = {}) {
+  const { rerender = true } = options;
+  if (imageStatusTimer) clearTimeout(imageStatusTimer);
+  imageStatusTimer = null;
+  imageStatusMessage = "";
+  if (rerender) renderPassiveImage();
+}
+
+function showImageStatus(message, durationMs = 5000) {
+  clearImageStatus({ rerender: false });
+  imageStatusMessage = message || "";
+  imageContainerHidden = false;
+  renderPassiveImage();
+  if (!imageStatusMessage || durationMs <= 0) return;
+  imageStatusTimer = setTimeout(() => clearImageStatus(), durationMs);
+}
+
+function getFirstPastedImageFile(e) {
+  const items = Array.from(e.clipboardData?.items || []);
+  for (const item of items) {
+    if (!item.type.startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (file) return file;
+  }
+
+  const files = Array.from(e.clipboardData?.files || []);
+  return files.find((file) => file?.type?.startsWith("image/")) || null;
+}
+
+function cancelImageLongPress() {
+  if (!imageLongPressTimer) return;
+  clearTimeout(imageLongPressTimer);
+  imageLongPressTimer = null;
 }
 
 function toFinalHebrewLetter(ch) {
@@ -612,6 +671,12 @@ function renderPassiveImage() {
   imageNoteWrapEl.classList.remove("hidden");
   imageNoteShowEl.classList.add("hidden");
 
+  if (imageNoteStatusEl) {
+    imageNoteStatusEl.textContent = imageStatusMessage;
+    imageNoteStatusEl.classList.toggle("hidden", !imageStatusMessage);
+    imageNoteStatusEl.classList.toggle("centered", !passiveImageDataUrl);
+  }
+
   if (passiveImageDataUrl) {
     imageNoteImgEl.src = passiveImageDataUrl;
     imageNoteImgEl.classList.remove("hidden");
@@ -620,12 +685,13 @@ function renderPassiveImage() {
   } else {
     imageNoteImgEl.src = "";
     imageNoteImgEl.classList.add("hidden");
-    imageNoteEmptyEl.classList.remove("hidden");
-    imageNoteHintEl?.classList.remove("hidden");
+    imageNoteEmptyEl.classList.toggle("hidden", !!imageStatusMessage);
+    imageNoteHintEl?.classList.toggle("hidden", !!imageStatusMessage);
   }
 }
 
 function setPassiveImage(dataUrl) {
+  clearImageStatus({ rerender: false });
   passiveImageDataUrl = dataUrl || "";
   imageContainerHidden = false;
   renderPassiveImage();
@@ -654,12 +720,41 @@ if (imageUploadEl) {
 if (imageNoteWrapEl) {
   imageNoteWrapEl.addEventListener("pointerdown", (e) => {
     if (e.target === imageNoteCloseEl || e.target === imageNoteShowEl) return;
-    if (!passiveImageDataUrl) {
-      imagePasteTargetEl?.focus();
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+
+    focusImagePasteTarget();
+    cancelImageLongPress();
+    imageLongPressStartX = e.clientX;
+    imageLongPressStartY = e.clientY;
+    imageLongPressTimer = setTimeout(() => {
+      imageSuppressClickUntil = Date.now() + 1200;
+      focusImagePasteTarget();
+    }, 450);
+  });
+
+  imageNoteWrapEl.addEventListener("pointermove", (e) => {
+    if (!imageLongPressTimer) return;
+    const dx = Math.abs(e.clientX - imageLongPressStartX);
+    const dy = Math.abs(e.clientY - imageLongPressStartY);
+    if (dx > 12 || dy > 12) {
+      cancelImageLongPress();
     }
   });
 
-  imageNoteWrapEl.addEventListener("click", () => {
+  ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+    imageNoteWrapEl.addEventListener(eventName, () => {
+      cancelImageLongPress();
+    });
+  });
+
+  imageNoteWrapEl.addEventListener("click", (e) => {
+    if (e.target === imageNoteCloseEl || e.target === imageNoteShowEl) return;
+    if (Date.now() < imageSuppressClickUntil) {
+      imageSuppressClickUntil = 0;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     imageUploadEl?.click();
   });
 }
@@ -681,25 +776,25 @@ if (imageNoteShowEl) {
 
 document.addEventListener("paste", (e) => {
   const target = e.target;
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-    if (target !== imagePasteTargetEl) return;
+  const imageFile = getFirstPastedImageFile(e);
+
+  if (imageFile) {
+    e.preventDefault();
+    handleImageFile(imageFile);
+    if (imagePasteTargetEl) imagePasteTargetEl.value = "";
+    return;
   }
 
-  const inImageArea = imageNoteWrapEl?.contains(target) || target === imagePasteTargetEl;
-  if (!inImageArea) return;
-
-  const items = e.clipboardData?.items || [];
-  for (const item of items) {
-    if (item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      if (file) {
-        e.preventDefault();
-        handleImageFile(file);
-        if (imagePasteTargetEl) imagePasteTargetEl.value = "";
-        break;
-      }
-    }
+  if (isTextEntryTarget(target) && target !== imagePasteTargetEl) {
+    return;
   }
+
+  if (target === imagePasteTargetEl) {
+    e.preventDefault();
+    imagePasteTargetEl.value = "";
+  }
+
+  showImageStatus("הלוח לא מכיל תמונה");
 });
 
 function recompute() {

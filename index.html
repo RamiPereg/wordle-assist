@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="wa-build" content="2026-07-07-1" />
+  <meta name="wa-build" content="2026-07-07-2" />
   <title>נו באמת</title>
 
-  <link rel="manifest" href="manifest.webmanifest?v=2026-07-07-1" />
+  <link rel="manifest" href="manifest.webmanifest?v=2026-07-07-2" />
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -307,6 +307,27 @@
       margin-bottom: 10px;
     }
 
+    .image-note-status {
+      position: absolute;
+      top: 10px;
+      left: 40px;
+      right: 10px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(17, 17, 17, 0.86);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: center;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .image-note-status.centered {
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
     .image-paste-target {
       position: absolute;
       top: 0;
@@ -412,6 +433,7 @@
             <button type="button" class="image-note-close" id="image-note-close" aria-label="סגירת תמונה">×</button>
             <div class="image-note-empty" id="image-note-empty">Paste or upload an image</div>
             <div class="image-note-hint" id="image-note-hint">iPhone / Android: לחיצה ארוכה כאן להדבקה</div>
+            <div class="image-note-status hidden" id="image-note-status" aria-live="polite"></div>
             <textarea id="image-paste-target" class="image-paste-target" aria-label="יעד הדבקה מוסתר"></textarea>
             <img class="image-note-img hidden" id="image-note-img" alt="תמונת עזר" />
           </div>
@@ -426,6 +448,6 @@
     <div class="build-version" id="build-version" aria-label="App version"></div>
   </div>
 
- <script src="app.js?v=2026-07-07-1"></script>
+ <script src="app.js?v=2026-07-07-2"></script>
 </body>
 </html>
