@@ -1,5 +1,5 @@
 /* PWA registration */
-const APP_VERSION = "2026-07-07-3";
+const APP_VERSION = "2026-07-08-1";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -241,6 +241,15 @@ function formatVisibleCount(count) {
 function setVisibleCount(count) {
   if (!visibleCountEl) return;
   visibleCountEl.textContent = count > 0 ? formatVisibleCount(count) : "";
+}
+
+const HEBREW_SORT_ORDER = "אבגדהוזחטיכלמנסעפצקרשת";
+const HEBREW_SORT_RANK = new Map([...HEBREW_SORT_ORDER].map((ch, index) => [ch, index]));
+
+function getFirstLetterSortRank(arr5) {
+  const first = toRegularHebrewLetter(arr5[0] || "");
+  if (!first) return HEBREW_SORT_ORDER.length + 1;
+  return HEBREW_SORT_RANK.get(first) ?? HEBREW_SORT_ORDER.length;
 }
 
 function countChars(str) {
@@ -829,6 +838,16 @@ function recompute() {
 
   const greenDupEnabled = !!duplicateToggleEl?.checked;
   const yellowDupEnabled = !!yellowDuplicateToggleEl?.checked;
+  const completionAlphabetSet = new Set();
+  if (greenDupEnabled) {
+    for (const slot of slots) {
+      if (slot.fixedChar) completionAlphabetSet.add(slot.fixedChar);
+    }
+  }
+  if (yellowDupEnabled) {
+    for (const ch of pool) completionAlphabetSet.add(ch);
+  }
+  const completionAlphabet = [...completionAlphabetSet];
   const k = pool.length;
   const basePlacements = [];
 
@@ -867,22 +886,41 @@ function recompute() {
     orderedBasePlacements.push(arr.slice());
   }
 
-  const completionAlphabetSet = new Set();
-  if (greenDupEnabled) {
-    for (const slot of slots) {
-      if (slot.fixedChar) completionAlphabetSet.add(slot.fixedChar);
+  const completionSeedPlacements = orderedBasePlacements.map((arr) => arr.slice());
+  const completionSeedKeys = new Set(baseKeys);
+
+  if (completionAlphabet.length > 0 && k > freePositions.length) {
+    const poolIndexes = Array.from({ length: k }, (_, idx) => idx);
+
+    for (let yellowCount = 0; yellowCount < freePositions.length; yellowCount++) {
+      const chosenPoolSets = combinations(poolIndexes, yellowCount);
+      const chosenPositionSets = combinations(freePositions, yellowCount);
+
+      for (const chosenPool of chosenPoolSets) {
+        const selectedLetters = chosenPool.map((idx) => pool[idx]);
+        const ms = countCharsArray(selectedLetters);
+
+        for (const chosenPositions of chosenPositionSets) {
+          const baseCopy = base.slice();
+          const placements = generatePlacements(baseCopy, chosenPositions, ms);
+
+          for (const arr of placements) {
+            if (!placementRespectsDuplicateCaps(arr, duplicateCaps)) continue;
+            const key = makeKey(arr);
+            if (completionSeedKeys.has(key)) continue;
+            completionSeedKeys.add(key);
+            completionSeedPlacements.push(arr.slice());
+          }
+        }
+      }
     }
   }
-  if (yellowDupEnabled) {
-    for (const ch of pool) completionAlphabetSet.add(ch);
-  }
-  const completionAlphabet = [...completionAlphabetSet];
 
   const completionPlacements = [];
   const completionKeys = new Set(baseKeys);
 
   if (completionAlphabet.length > 0) {
-    for (const baseArr of orderedBasePlacements) {
+    for (const baseArr of completionSeedPlacements) {
       const variants = generateCompletionVariants(baseArr.slice(), freePositions, completionAlphabet, duplicateCaps);
       for (const arr of variants) {
         if (!placementRespectsDuplicateCaps(arr, duplicateCaps)) continue;
@@ -897,14 +935,15 @@ function recompute() {
   const frag = document.createDocumentFragment();
   let visiblePatternCount = 0;
 
-  for (const arr of completionPlacements) {
-    const line = renderPattern(arr);
-    if (!line) continue;
-    if (arr.some(Boolean)) visiblePatternCount++;
-    frag.appendChild(line);
-  }
+  const placementsForDisplay = [...completionPlacements, ...orderedBasePlacements]
+    .map((arr, index) => ({ arr, index }))
+    .sort((a, b) => {
+      const rankDiff = getFirstLetterSortRank(a.arr) - getFirstLetterSortRank(b.arr);
+      if (rankDiff !== 0) return rankDiff;
+      return a.index - b.index;
+    });
 
-  for (const arr of orderedBasePlacements) {
+  for (const { arr } of placementsForDisplay) {
     const line = renderPattern(arr);
     if (!line) continue;
     if (arr.some(Boolean)) visiblePatternCount++;
